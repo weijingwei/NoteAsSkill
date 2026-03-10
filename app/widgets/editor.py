@@ -39,7 +39,7 @@ EDITOR_HTML = """
     </style>
 </head>
 <body>
-    <textarea id="editor"></textarea>
+    <textarea id="mde-editor"></textarea>
     <script src="https://cdn.jsdelivr.net/npm/easymde/dist/easymde.min.js"></script>
     <script>
         var editor;
@@ -47,7 +47,7 @@ EDITOR_HTML = """
 
         function initEditor() {{
             editor = new EasyMDE({{
-                element: document.getElementById('editor'),
+                element: document.getElementById('mde-editor'),
                 autofocus: true,
                 spellChecker: false,
                 status: false,
