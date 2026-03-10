@@ -41,3 +41,8 @@ Thumbs.db
 notebook/.index.json
 notebook/.config.yaml
 *.pyc
+
+# Claude Code
+CLAUDE.md
+.claude/
+tests/screenshots/

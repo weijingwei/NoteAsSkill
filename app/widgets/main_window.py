@@ -142,7 +142,7 @@ class MainWindow(QMainWindow):
         # 工具栏（放在侧边栏上部）
         self.sidebar_toolbar = QToolBar()
         self.sidebar_toolbar.setMovable(False)
-        self.sidebar_toolbar.setIconSize(self.sidebar_toolbar.iconSize())
+        self.sidebar_toolbar.setFixedHeight(36)
         sidebar_layout.addWidget(self.sidebar_toolbar)
 
         # 添加工具栏按钮
@@ -156,14 +156,10 @@ class MainWindow(QMainWindow):
         save_action.triggered.connect(self._on_save)
         self.sidebar_toolbar.addAction(save_action)
 
-        self.sidebar_toolbar.addSeparator()
-
         delete_action = QAction("删除", self)
         delete_action.setToolTip("删除当前笔记")
         delete_action.triggered.connect(self._on_delete_note)
         self.sidebar_toolbar.addAction(delete_action)
-
-        self.sidebar_toolbar.addSeparator()
 
         # 同步按钮
         sync_action = QAction("同步", self)
@@ -791,21 +787,19 @@ class MainWindow(QMainWindow):
     @Slot(str, str, str)
     def _on_note_moved(self, note_id: str, old_folder: str, new_folder: str) -> None:
         """笔记被移动"""
-        self.notification_bar.show_progress(f"正在移动笔记...")
-
-        # 触发两个文件夹的 SKILL.md 更新（立即模式）
+        # 触发两个文件夹的 SKILL.md 更新（延迟模式，避免阻塞）
         if old_folder:
             self._folder_skill_updater.mark_folder_dirty(
                 old_folder,
-                self._folder_skill_updater.MODE_IMMEDIATE
+                self._folder_skill_updater.MODE_DELAYED
             )
         if new_folder and new_folder != old_folder:
             self._folder_skill_updater.mark_folder_dirty(
                 new_folder,
-                self._folder_skill_updater.MODE_IMMEDIATE
+                self._folder_skill_updater.MODE_DELAYED
             )
 
-        self.notification_bar.show_success(f"笔记已移动到「{new_folder or '根目录'}」")
+        self.statusbar.showMessage(f"笔记已移动到「{new_folder or '根目录'}」", 3000)
 
     @Slot()
     def _on_content_changed(self) -> None:

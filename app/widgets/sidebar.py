@@ -73,14 +73,14 @@ class DropableTreeWidget(QTreeWidget):
 
     def dragEnterEvent(self, event):
         """拖拽进入事件"""
-        if event.mimeData().hasData("application/x-note-id"):
+        if event.mimeData().hasFormat("application/x-note-id"):
             event.acceptProposedAction()
         else:
             event.ignore()
 
     def dragMoveEvent(self, event):
         """拖拽移动事件"""
-        if event.mimeData().hasData("application/x-note-id"):
+        if event.mimeData().hasFormat("application/x-note-id"):
             # 获取鼠标位置的项
             item = self.itemAt(event.pos())
             if item:
@@ -96,7 +96,7 @@ class DropableTreeWidget(QTreeWidget):
 
     def dropEvent(self, event):
         """放置事件"""
-        if event.mimeData().hasData("application/x-note-id"):
+        if event.mimeData().hasFormat("application/x-note-id"):
             note_id = bytes(event.mimeData().data("application/x-note-id")).decode()
 
             # 获取目标文件夹
