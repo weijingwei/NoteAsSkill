@@ -119,6 +119,11 @@ class Editor(QWidget):
         self._channel = QWebChannel()
         self._channel.registerObject("bridge", self._bridge)
 
+        # 历史记录
+        self._history: list[str] = []
+        self._history_index: int = -1
+        self._current_title: str = ""
+
         self._init_ui()
         self._connect_signals()
 
@@ -162,6 +167,54 @@ class Editor(QWidget):
 
         if title:
             self.setWindowTitle(title)
+            self._current_title = title
+
+        # 添加到历史记录
+        self._add_to_history(content, title)
+
+    def _add_to_history(self, content: str, title: str) -> None:
+        """添加到历史记录"""
+        # 如果当前不在历史末尾，截断后面的记录
+        if self._history_index < len(self._history) - 1:
+            self._history = self._history[:self._history_index + 1]
+
+        # 添加新记录
+        self._history.append((content, title))
+        self._history_index = len(self._history) - 1
+
+    def can_go_back(self) -> bool:
+        """是否可以后退"""
+        return self._history_index > 0
+
+    def can_go_forward(self) -> bool:
+        """是否可以前进"""
+        return self._history_index < len(self._history) - 1
+
+    def go_back(self) -> bool:
+        """后退"""
+        if self.can_go_back():
+            self._history_index -= 1
+            content, title = self._history[self._history_index]
+            js = f"setContent({repr(content)});"
+            self.web_view.page().runJavaScript(js)
+            if title:
+                self.setWindowTitle(title)
+                self._current_title = title
+            return True
+        return False
+
+    def go_forward(self) -> bool:
+        """前进"""
+        if self.can_go_forward():
+            self._history_index += 1
+            content, title = self._history[self._history_index]
+            js = f"setContent({repr(content)});"
+            self.web_view.page().runJavaScript(js)
+            if title:
+                self.setWindowTitle(title)
+                self._current_title = title
+            return True
+        return False
 
     def get_content(self) -> str:
         """获取编辑器内容"""

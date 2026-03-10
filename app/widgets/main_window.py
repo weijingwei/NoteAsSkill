@@ -177,6 +177,17 @@ class MainWindow(QMainWindow):
         sync_action.triggered.connect(self._on_git_sync)
         self.sidebar_toolbar.addAction(sync_action)
 
+        # 导航按钮
+        self.back_action = QAction("◀", self)
+        self.back_action.setToolTip("后退")
+        self.back_action.triggered.connect(self._on_back)
+        self.sidebar_toolbar.addAction(self.back_action)
+
+        self.forward_action = QAction("▶", self)
+        self.forward_action.setToolTip("前进")
+        self.forward_action.triggered.connect(self._on_forward)
+        self.sidebar_toolbar.addAction(self.forward_action)
+
         # 侧边栏
         self.sidebar = Sidebar()
         sidebar_layout.addWidget(self.sidebar)
@@ -303,15 +314,15 @@ class MainWindow(QMainWindow):
                 background-color: #FFFEF9;
                 border: 1px solid #E8DFD5;
                 border-radius: 12px;
-                padding: 8px;
+                padding: 6px;
                 font-family: 'Segoe UI', 'SF Pro Text', sans-serif;
             }
             QListWidget::item {
-                padding: 12px 16px;
-                border-radius: 8px;
-                margin: 4px 4px;
+                padding: 6px 12px;
+                border-radius: 6px;
+                margin: 2px 2px;
                 color: #4A3F35;
-                font-size: 14px;
+                font-size: 13px;
                 border: 1px solid transparent;
             }
             QListWidget::item:selected {
@@ -330,11 +341,11 @@ class MainWindow(QMainWindow):
                 background-color: #FFFEF9;
                 border: 1px solid #E8DFD5;
                 border-radius: 12px;
-                padding: 8px;
+                padding: 6px;
             }
             QTreeWidget::item {
-                padding: 6px 8px;
-                border-radius: 6px;
+                padding: 4px 6px;
+                border-radius: 4px;
                 color: #4A3F35;
             }
             QTreeWidget::item:selected {
@@ -350,15 +361,11 @@ class MainWindow(QMainWindow):
             }
             QTreeWidget::branch:has-children:!has-siblings:closed,
             QTreeWidget::branch:closed:has-children:has-siblings {
-                background-color: #FDF8F0;
-                border: 1px solid #E8DFD5;
-                border-radius: 4px;
+                background-color: transparent;
             }
             QTreeWidget::branch:open:has-children:!has-siblings,
             QTreeWidget::branch:open:has-children:has-siblings {
-                background-color: #FDF8F0;
-                border: 1px solid #E8DFD5;
-                border-radius: 4px;
+                background-color: transparent;
             }
             QListWidget::item:selected {
                 background-color: #FDF6ED;
@@ -782,7 +789,7 @@ class MainWindow(QMainWindow):
         self.statusbar.showMessage("就绪")
 
         # 添加版本号到右下角
-        self.version_label = QLabel("v0.1.7")
+        self.version_label = QLabel("v0.1.8")
         self.version_label.setStyleSheet("""
             QLabel {
                 color: #A09080;
@@ -902,6 +909,9 @@ class MainWindow(QMainWindow):
         # 更新 AI 对话面板的笔记内容
         self.chat_panel.set_current_note(note.title, content)
 
+        # 更新导航按钮状态
+        self._update_nav_buttons()
+
         self.statusbar.showMessage(f"已打开: {note.title}")
 
     @Slot(Note)
@@ -1002,6 +1012,23 @@ class MainWindow(QMainWindow):
             <p>用户只需专注于编辑笔记内容，系统自动处理 SKILL.md 生成。</p>
             """,
         )
+
+    @Slot()
+    def _on_back(self) -> None:
+        """后退"""
+        if self.editor.go_back():
+            self._update_nav_buttons()
+
+    @Slot()
+    def _on_forward(self) -> None:
+        """前进"""
+        if self.editor.go_forward():
+            self._update_nav_buttons()
+
+    def _update_nav_buttons(self) -> None:
+        """更新导航按钮状态"""
+        self.back_action.setEnabled(self.editor.can_go_back())
+        self.forward_action.setEnabled(self.editor.can_go_forward())
 
     @Slot()
     def _toggle_sidebar(self) -> None:

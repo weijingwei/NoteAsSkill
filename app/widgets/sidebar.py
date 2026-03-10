@@ -7,8 +7,8 @@
 
 from typing import Any
 
-from PySide6.QtCore import Qt, Signal, Slot, QMimeData
-from PySide6.QtGui import QAction, QDrag
+from PySide6.QtCore import Qt, Signal, Slot, QMimeData, QRect
+from PySide6.QtGui import QAction, QDrag, QPainter, QColor, QFont
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QInputDialog,
@@ -70,6 +70,46 @@ class DropableTreeWidget(QTreeWidget):
         self.setDragEnabled(False)
         self.setDropIndicatorShown(True)
         self._drag_over_item: QTreeWidgetItem | None = None
+
+    def drawBranches(self, painter: QPainter, rect: QRect, item: QTreeWidgetItem) -> None:
+        """自定义绘制展开/收起按钮，使用简单的+/-"""
+        # 检查是否有子项
+        if item.childCount() == 0:
+            return
+
+        # 计算按钮位置
+        button_size = 12
+        button_rect = QRect(
+            rect.left() + 2,
+            rect.top() + (rect.height() - button_size) // 2,
+            button_size,
+            button_size
+        )
+
+        # 设置绘制样式
+        painter.save()
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        # 绘制背景圆
+        painter.setBrush(QColor("#FDF6ED"))
+        painter.setPen(QColor("#D4A574"))
+        painter.drawEllipse(button_rect)
+
+        # 绘制+或-
+        painter.setPen(QColor("#8B5A2B"))
+        font = QFont()
+        font.setPointSize(10)
+        font.setBold(True)
+        painter.setFont(font)
+
+        if item.isExpanded():
+            # 展开状态，绘制-
+            painter.drawText(button_rect, Qt.AlignmentFlag.AlignCenter, "-")
+        else:
+            # 收起状态，绘制+
+            painter.drawText(button_rect, Qt.AlignmentFlag.AlignCenter, "+")
+
+        painter.restore()
 
     def dragEnterEvent(self, event):
         """拖拽进入事件"""
@@ -162,7 +202,38 @@ class Sidebar(QWidget):
         self.folder_tree = DropableTreeWidget()
         self.folder_tree.setHeaderHidden(True)
         self.folder_tree.setMaximumHeight(200)
-        self.folder_tree.setIndentation(16)
+        self.folder_tree.setIndentation(20)
+        self.folder_tree.setStyleSheet("""
+            QTreeWidget {
+                background-color: #FFFEF9;
+                border: 1px solid #E8DFD5;
+                border-radius: 12px;
+                padding: 6px;
+                font-size: 13px;
+            }
+            QTreeWidget::item {
+                padding: 4px 6px;
+                border-radius: 4px;
+                color: #4A3F35;
+            }
+            QTreeWidget::item:selected {
+                background-color: #FDF6ED;
+                color: #8B5A2B;
+            }
+            QTreeWidget::item:hover:!selected {
+                background-color: #FDF8F0;
+            }
+            QTreeWidget::branch:has-children:!has-siblings:closed,
+            QTreeWidget::branch:closed:has-children:has-siblings {
+                background-color: transparent;
+                border-image: none;
+            }
+            QTreeWidget::branch:open:has-children:!has-siblings,
+            QTreeWidget::branch:open:has-children:has-siblings {
+                background-color: transparent;
+                border-image: none;
+            }
+        """)
         layout.addWidget(self.folder_tree)
 
         # 笔记列表标题
