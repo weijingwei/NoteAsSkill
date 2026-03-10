@@ -71,10 +71,11 @@ class DropableTreeWidget(QTreeWidget):
         self.setDropIndicatorShown(True)
         self._drag_over_item: QTreeWidgetItem | None = None
 
-    def drawBranches(self, painter: QPainter, rect: QRect, item: QTreeWidgetItem) -> None:
+    def drawBranches(self, painter: QPainter, rect: QRect, index) -> None:
         """自定义绘制展开/收起按钮，使用简单的+/-"""
-        # 检查是否有子项
-        if item.childCount() == 0:
+        # 从index获取item
+        item = self.itemFromIndex(index)
+        if item is None or item.childCount() == 0:
             return
 
         # 计算按钮位置

@@ -122,10 +122,11 @@ class MainWindow(QMainWindow):
     def _init_ui(self) -> None:
         """初始化界面"""
         # 主容器
-        central_widget = QWidget()
-        self.setCentralWidget(central_widget)
+        self.central_widget = QWidget()
+        self.central_widget.setMouseTracking(True)  # 启用鼠标追踪
+        self.setCentralWidget(self.central_widget)
 
-        main_layout = QVBoxLayout(central_widget)
+        main_layout = QVBoxLayout(self.central_widget)
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
 
@@ -138,7 +139,7 @@ class MainWindow(QMainWindow):
 
         # 左侧：笔记列表（包含工具栏）
         self.sidebar_container = QWidget()
-        self.sidebar_container.setMinimumWidth(200)  # 设置最小宽度
+        self.sidebar_container.setMinimumWidth(220)  # 设置最小宽度，确保工具栏显示完整
         sidebar_layout = QVBoxLayout(self.sidebar_container)
         sidebar_layout.setContentsMargins(0, 0, 0, 0)
         sidebar_layout.setSpacing(0)
@@ -467,9 +468,10 @@ class MainWindow(QMainWindow):
             }
             QComboBox::down-arrow {
                 image: none;
-                border-left: 4px solid transparent;
-                border-right: 4px solid transparent;
-                border-top: 5px solid #8B5A2B;
+                border-left: 5px solid transparent;
+                border-right: 5px solid transparent;
+                border-top: 6px solid #8B5A2B;
+                margin-right: 8px;
             }
             QComboBox QAbstractItemView {
                 background-color: #FFFEF9;
@@ -479,17 +481,21 @@ class MainWindow(QMainWindow):
                 selection-background-color: #FDF6ED;
                 selection-color: #8B5A2B;
                 outline: none;
+                background: #FFFEF9;
             }
             QComboBox QAbstractItemView::item {
                 padding: 6px 10px;
                 border-radius: 4px;
                 color: #3D3428;
+                background: transparent;
             }
             QComboBox QAbstractItemView::item:hover {
                 background-color: #FDF8F0;
             }
             QComboBox QAbstractItemView::item:selected {
                 background-color: #FDF6ED;
+                color: #8B5A2B;
+            }
                 color: #8B5A2B;
             }
 
@@ -789,7 +795,7 @@ class MainWindow(QMainWindow):
         self.statusbar.showMessage("就绪")
 
         # 添加版本号到右下角
-        self.version_label = QLabel("v0.1.8")
+        self.version_label = QLabel("v0.1.9")
         self.version_label.setStyleSheet("""
             QLabel {
                 color: #A09080;
@@ -904,7 +910,7 @@ class MainWindow(QMainWindow):
 
         note_manager = get_note_manager()
         content = note_manager.get_note_content(note.id)
-        self.editor.set_content(content, note.title)
+        self.editor.set_content(content, note.title, note.id)
 
         # 更新 AI 对话面板的笔记内容
         self.chat_panel.set_current_note(note.title, content)
@@ -918,7 +924,7 @@ class MainWindow(QMainWindow):
     def _on_note_created(self, note: Note) -> None:
         """笔记被创建"""
         self._current_note = note
-        self.editor.set_content("", note.title)
+        self.editor.set_content("", note.title, note.id)
 
         # 更新 AI 对话面板
         self.chat_panel.set_current_note(note.title, "")
@@ -1016,14 +1022,40 @@ class MainWindow(QMainWindow):
     @Slot()
     def _on_back(self) -> None:
         """后退"""
-        if self.editor.go_back():
-            self._update_nav_buttons()
+        note_id = self.editor.go_back()
+        if note_id:
+            # 选中对应的笔记
+            note_manager = get_note_manager()
+            note = note_manager.get_note(note_id)
+            if note:
+                self._current_note = note
+                content = note_manager.get_note_content(note.id)
+                # 不添加到历史，只设置内容
+                js = f"setContent({repr(content)});"
+                self.editor.web_view.page().runJavaScript(js)
+                self.editor.setWindowTitle(note.title)
+                self.chat_panel.set_current_note(note.title, content)
+                self._update_nav_buttons()
+                self.statusbar.showMessage(f"已打开: {note.title}")
 
     @Slot()
     def _on_forward(self) -> None:
         """前进"""
-        if self.editor.go_forward():
-            self._update_nav_buttons()
+        note_id = self.editor.go_forward()
+        if note_id:
+            # 选中对应的笔记
+            note_manager = get_note_manager()
+            note = note_manager.get_note(note_id)
+            if note:
+                self._current_note = note
+                content = note_manager.get_note_content(note.id)
+                # 不添加到历史，只设置内容
+                js = f"setContent({repr(content)});"
+                self.editor.web_view.page().runJavaScript(js)
+                self.editor.setWindowTitle(note.title)
+                self.chat_panel.set_current_note(note.title, content)
+                self._update_nav_buttons()
+                self.statusbar.showMessage(f"已打开: {note.title}")
 
     def _update_nav_buttons(self) -> None:
         """更新导航按钮状态"""
