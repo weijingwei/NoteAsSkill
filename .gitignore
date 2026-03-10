@@ -39,4 +39,5 @@ Thumbs.db
 
 # Project specific
 notebook/.index.json
+notebook/.config.yaml
 *.pyc
