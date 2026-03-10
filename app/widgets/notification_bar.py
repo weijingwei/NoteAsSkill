@@ -58,19 +58,19 @@ class NotificationBar(QWidget):
             message: 消息内容
             auto_hide: 自动隐藏时间（毫秒），0 表示不自动隐藏
         """
-        self._show("ℹ️", message, "#E3F2FD", "#1565C0", auto_hide)
+        self._show("ℹ️", message, "#FDF8F0", "#8B5A2B", auto_hide)
 
     def show_progress(self, message: str) -> None:
         """显示进度提示"""
-        self._show("🔄", message, "#FFF8E1", "#F57C00", 0)
+        self._show("◆", message, "#FDF6ED", "#D4A574", 0)
 
     def show_success(self, message: str, auto_hide: int = 3000) -> None:
         """显示成功提示"""
-        self._show("✓", message, "#E8F5E9", "#2E7D32", auto_hide)
+        self._show("✓", message, "#F0F7F0", "#5A8B5A", auto_hide)
 
     def show_error(self, message: str, auto_hide: int = 5000) -> None:
         """显示错误提示"""
-        self._show("✗", message, "#FFEBEE", "#C62828", auto_hide)
+        self._show("✗", message, "#FDF0F0", "#B85A5A", auto_hide)
 
     def _show(self, icon: str, message: str, bg_color: str, text_color: str, auto_hide: int) -> None:
         """显示提示"""

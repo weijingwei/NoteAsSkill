@@ -10,6 +10,7 @@ from PySide6.QtCore import QSettings, Qt, Slot, QThread, Signal
 from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import (
     QApplication,
+    QLabel,
     QMainWindow,
     QMessageBox,
     QSplitter,
@@ -21,6 +22,7 @@ from PySide6.QtWidgets import (
 
 from ..core.config import get_config
 from ..core.note_manager import Note, get_note_manager
+from ..core.folder_skill_updater import get_folder_skill_updater
 from .chat_panel import ChatPanel
 from .editor import Editor
 from .sidebar import Sidebar
@@ -76,7 +78,7 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
 
-        self.setWindowTitle("NoteAsSkill - 笔记即技能")
+        self.setWindowTitle("NoteAsSkil - 笔技")
         self.setMinimumSize(1200, 800)
 
         # 加载设置
@@ -89,12 +91,20 @@ class MainWindow(QMainWindow):
         # 初始化组件
         self._init_ui()
         self._init_menu()
-        self._init_toolbar()
         self._init_statusbar()
         self._connect_signals()
+        self._init_folder_skill_updater()
 
         # 当前笔记
         self._current_note: Note | None = None
+
+    def _init_folder_skill_updater(self) -> None:
+        """初始化文件夹 SKILL 更新器"""
+        self._folder_skill_updater = get_folder_skill_updater()
+
+        # 连接信号
+        self._folder_skill_updater.update_finished.connect(self._on_folder_skill_updated)
+        self._folder_skill_updater.update_error.connect(self._on_folder_skill_error)
 
     def _restore_geometry(self) -> None:
         """恢复窗口几何信息"""
@@ -123,9 +133,41 @@ class MainWindow(QMainWindow):
         # 三列分割器
         self.splitter = QSplitter(Qt.Horizontal)
 
-        # 左侧：笔记列表
+        # 左侧：笔记列表（包含工具栏）
+        sidebar_container = QWidget()
+        sidebar_layout = QVBoxLayout(sidebar_container)
+        sidebar_layout.setContentsMargins(0, 0, 0, 0)
+        sidebar_layout.setSpacing(0)
+
+        # 工具栏（放在侧边栏上部）
+        self.sidebar_toolbar = QToolBar()
+        self.sidebar_toolbar.setMovable(False)
+        self.sidebar_toolbar.setIconSize(self.sidebar_toolbar.iconSize())
+        sidebar_layout.addWidget(self.sidebar_toolbar)
+
+        # 添加工具栏按钮
+        new_action = QAction("新建", self)
+        new_action.setToolTip("新建笔记")
+        new_action.triggered.connect(self._on_new_note)
+        self.sidebar_toolbar.addAction(new_action)
+
+        save_action = QAction("保存", self)
+        save_action.setToolTip("保存当前笔记")
+        save_action.triggered.connect(self._on_save)
+        self.sidebar_toolbar.addAction(save_action)
+
+        self.sidebar_toolbar.addSeparator()
+
+        delete_action = QAction("删除", self)
+        delete_action.setToolTip("删除当前笔记")
+        delete_action.triggered.connect(self._on_delete_note)
+        self.sidebar_toolbar.addAction(delete_action)
+
+        # 侧边栏
         self.sidebar = Sidebar()
-        self.splitter.addWidget(self.sidebar)
+        sidebar_layout.addWidget(self.sidebar)
+
+        self.splitter.addWidget(sidebar_container)
 
         # 中间：编辑器
         self.editor = Editor()
@@ -144,203 +186,390 @@ class MainWindow(QMainWindow):
         self._apply_style()
 
     def _apply_style(self) -> None:
-        """应用统一样式"""
+        """应用统一样式 - Editorial Warm 设计风格"""
         self.setStyleSheet("""
-            /* 主窗口 */
+            /* ========================================
+               NoteAsSkil - Editorial Warm Theme
+               温暖的编辑风格，如同精致的纸质笔记本
+               ======================================== */
+
+            /* 主窗口 - 温暖的象牙白背景 */
             QMainWindow {
-                background-color: #f5f5f5;
+                background-color: #F5EDE4;
             }
 
-            /* 分割器 */
+            /* 分割器 - 优雅的分隔线 */
             QSplitter::handle {
-                background-color: #e0e0e0;
-                width: 1px;
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #E8DFD5, stop:0.5 #D4C4B0, stop:1 #E8DFD5);
+                width: 2px;
             }
             QSplitter::handle:hover {
-                background-color: #1976D2;
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #D4A574, stop:0.5 #C4956A, stop:1 #D4A574);
             }
 
-            /* 侧边栏 */
+            /* 侧边栏 - 温暖的米色卡片 */
             Sidebar {
-                background-color: #fafafa;
-                border-right: 1px solid #e0e0e0;
+                background-color: #FBF7F2;
+                border-right: 1px solid #E8DFD5;
             }
 
-            /* AI 对话面板 */
+            /* AI 对话面板 - 温暖的米色卡片 */
             ChatPanel {
-                background-color: #fafafa;
-                border-left: 1px solid #e0e0e0;
+                background-color: #FBF7F2;
+                border-left: 1px solid #E8DFD5;
             }
 
-            /* 列表 */
+            /* 列表 - 纸张质感 */
             QListWidget {
-                background-color: #ffffff;
-                border: none;
-                border-radius: 8px;
-                padding: 4px;
+                background-color: #FFFEF9;
+                border: 1px solid #E8DFD5;
+                border-radius: 12px;
+                padding: 8px;
+                font-family: 'Segoe UI', 'SF Pro Text', sans-serif;
             }
             QListWidget::item {
-                padding: 8px 12px;
-                border-radius: 4px;
-                margin: 2px 0;
+                padding: 12px 16px;
+                border-radius: 8px;
+                margin: 4px 4px;
+                color: #4A3F35;
+                font-size: 14px;
+                border: 1px solid transparent;
             }
             QListWidget::item:selected {
-                background-color: #E3F2FD;
-                color: #1976D2;
-            }
-            QListWidget::item:hover:!selected {
-                background-color: #f5f5f5;
-            }
-
-            /* 输入框 */
-            QLineEdit {
-                background-color: #ffffff;
-                border: 1px solid #e0e0e0;
-                border-radius: 6px;
-                padding: 8px 12px;
-                font-size: 14px;
-            }
-            QLineEdit:focus {
-                border-color: #1976D2;
-            }
-
-            /* 按钮 */
-            QPushButton {
-                background-color: #1976D2;
-                color: white;
-                border: none;
-                border-radius: 6px;
-                padding: 8px 16px;
-                font-size: 14px;
+                background-color: #FDF6ED;
+                color: #8B5A2B;
+                border: 1px solid #D4A574;
                 font-weight: 500;
             }
+            QListWidget::item:hover:!selected {
+                background-color: #FDF8F0;
+                border: 1px solid #E8D5C0;
+            }
+
+            /* 输入框 - 精致的书写区域 */
+            QLineEdit {
+                background-color: #FFFEF9;
+                border: 2px solid #E8DFD5;
+                border-radius: 10px;
+                padding: 10px 16px;
+                font-size: 14px;
+                color: #3D3428;
+                selection-background-color: #D4A574;
+                selection-color: white;
+            }
+            QLineEdit:focus {
+                border-color: #D4A574;
+                background-color: #FFFDF8;
+            }
+            QLineEdit:hover {
+                border-color: #D4C4B0;
+            }
+
+            /* 按钮 - 温暖的琥珀色调 */
+            QPushButton {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #D4A574, stop:1 #C49564);
+                color: #FFFEF9;
+                border: none;
+                border-radius: 10px;
+                padding: 10px 20px;
+                font-size: 14px;
+                font-weight: 600;
+                letter-spacing: 0.3px;
+            }
             QPushButton:hover {
-                background-color: #1565C0;
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #C49564, stop:1 #B48554);
             }
             QPushButton:pressed {
-                background-color: #0D47A1;
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #B48554, stop:1 #A47544);
             }
             QPushButton:disabled {
-                background-color: #BDBDBD;
+                background: #D5C8B8;
+                color: #A09585;
             }
 
-            /* 文本编辑 */
+            /* 文本编辑 - 书写纸张 */
             QTextEdit {
-                background-color: #ffffff;
-                border: 1px solid #e0e0e0;
-                border-radius: 6px;
-                padding: 8px;
+                background-color: #FFFEF9;
+                border: 2px solid #E8DFD5;
+                border-radius: 12px;
+                padding: 12px 16px;
                 font-size: 14px;
+                color: #3D3428;
+                line-height: 1.6;
+                selection-background-color: #D4A574;
+                selection-color: white;
             }
             QTextEdit:focus {
-                border-color: #1976D2;
+                border-color: #D4A574;
+                background-color: #FFFDF8;
             }
 
-            /* 下拉框 */
+            /* 下拉框 - 优雅的选择器 */
             QComboBox {
-                background-color: #ffffff;
-                border: 1px solid #e0e0e0;
-                border-radius: 6px;
-                padding: 8px 12px;
+                background-color: #FFFEF9;
+                border: 2px solid #E8DFD5;
+                border-radius: 10px;
+                padding: 10px 16px;
                 font-size: 14px;
+                color: #3D3428;
             }
             QComboBox:focus {
-                border-color: #1976D2;
+                border-color: #D4A574;
+            }
+            QComboBox:hover {
+                border-color: #D4C4B0;
             }
             QComboBox::drop-down {
                 border: none;
-                width: 24px;
+                width: 32px;
+                padding-right: 8px;
+            }
+            QComboBox::down-arrow {
+                image: none;
+                border-left: 5px solid transparent;
+                border-right: 5px solid transparent;
+                border-top: 6px solid #8B5A2B;
+            }
+            QComboBox QAbstractItemView {
+                background-color: #FFFEF9;
+                border: 2px solid #D4A574;
+                border-radius: 10px;
+                padding: 8px;
+                selection-background-color: #FDF6ED;
+                selection-color: #8B5A2B;
             }
 
-            /* 标签 */
+            /* 标签 - 温暖的文字 */
             QLabel {
-                color: #424242;
+                color: #5A4A3A;
                 font-size: 14px;
+                font-family: 'Segoe UI', 'SF Pro Text', sans-serif;
             }
 
-            /* 菜单栏 */
+            /* 菜单栏 - 精致的顶部导航 */
             QMenuBar {
-                background-color: #ffffff;
-                border-bottom: 1px solid #e0e0e0;
-                padding: 4px;
+                background-color: #FBF7F2;
+                border-bottom: 1px solid #E8DFD5;
+                padding: 6px 8px;
+                font-size: 13px;
             }
             QMenuBar::item {
-                padding: 6px 12px;
-                border-radius: 4px;
+                padding: 8px 14px;
+                border-radius: 6px;
+                color: #5A4A3A;
             }
             QMenuBar::item:selected {
-                background-color: #E3F2FD;
+                background-color: #FDF6ED;
+                color: #8B5A2B;
+            }
+            QMenuBar::item:pressed {
+                background-color: #FDF6ED;
             }
 
-            /* 菜单 */
+            /* 菜单 - 优雅的浮层 */
             QMenu {
-                background-color: #ffffff;
-                border: 1px solid #e0e0e0;
-                border-radius: 8px;
-                padding: 8px 0;
+                background-color: #FFFEF9;
+                border: 2px solid #E8DFD5;
+                border-radius: 12px;
+                padding: 8px;
             }
             QMenu::item {
-                padding: 8px 24px;
+                padding: 10px 24px;
+                border-radius: 6px;
+                color: #3D3428;
             }
             QMenu::item:selected {
-                background-color: #E3F2FD;
+                background-color: #FDF6ED;
+                color: #8B5A2B;
+            }
+            QMenu::separator {
+                height: 1px;
+                background: #E8DFD5;
+                margin: 8px 12px;
             }
 
-            /* 工具栏 */
+            /* 工具栏 - 紧凑的工具区 */
             QToolBar {
-                background-color: #ffffff;
-                border-bottom: 1px solid #e0e0e0;
-                padding: 4px 8px;
-                spacing: 8px;
+                background-color: #FBF7F2;
+                border-bottom: 1px solid #E8DFD5;
+                padding: 2px 8px;
+                spacing: 4px;
+                min-height: 32px;
             }
             QToolBar QToolButton {
                 background-color: transparent;
-                border: none;
-                border-radius: 4px;
-                padding: 6px 12px;
-                color: #424242;
+                border: 1px solid transparent;
+                border-radius: 6px;
+                padding: 4px 10px;
+                color: #5A4A3A;
+                font-size: 12px;
+                font-weight: 500;
+                min-height: 24px;
             }
             QToolBar QToolButton:hover {
-                background-color: #E3F2FD;
-                color: #1976D2;
+                background-color: #FDF6ED;
+                border-color: #E8D5C0;
+                color: #8B5A2B;
+            }
+            QToolBar QToolButton:pressed {
+                background-color: #FDF6ED;
+                border-color: #D4A574;
             }
 
-            /* 状态栏 */
+            /* 状态栏 - 安静的底部信息 */
             QStatusBar {
-                background-color: #ffffff;
-                border-top: 1px solid #e0e0e0;
-                color: #757575;
-                font-size: 13px;
-                padding: 4px 12px;
+                background-color: #FBF7F2;
+                border-top: 1px solid #E8DFD5;
+                color: #8B7B6B;
+                font-size: 12px;
+                padding: 6px 16px;
+                font-style: italic;
             }
 
-            /* 滚动条 */
+            /* 滚动条 - 优雅的滚动体验 */
             QScrollBar:vertical {
-                background-color: #f5f5f5;
-                width: 10px;
-                border-radius: 5px;
+                background-color: #F5EDE4;
+                width: 12px;
+                border-radius: 6px;
+                margin: 4px 2px;
             }
             QScrollBar::handle:vertical {
-                background-color: #BDBDBD;
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #D5C8B8, stop:1 #C5B8A8);
                 border-radius: 5px;
-                min-height: 30px;
+                min-height: 40px;
             }
             QScrollBar::handle:vertical:hover {
-                background-color: #9E9E9E;
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #D4A574, stop:1 #C49564);
+            }
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+                height: 0px;
             }
 
             QScrollBar:horizontal {
-                background-color: #f5f5f5;
-                height: 10px;
-                border-radius: 5px;
+                background-color: #F5EDE4;
+                height: 12px;
+                border-radius: 6px;
+                margin: 2px 4px;
             }
             QScrollBar::handle:horizontal {
-                background-color: #BDBDBD;
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #D5C8B8, stop:1 #C5B8A8);
                 border-radius: 5px;
-                min-width: 30px;
+                min-width: 40px;
             }
             QScrollBar::handle:horizontal:hover {
-                background-color: #9E9E9E;
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #D4A574, stop:1 #C49564);
+            }
+            QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
+                width: 0px;
+            }
+
+            /* 复选框 */
+            QCheckBox {
+                color: #3D3428;
+                font-size: 14px;
+                spacing: 8px;
+            }
+            QCheckBox::indicator {
+                width: 20px;
+                height: 20px;
+                border-radius: 6px;
+                border: 2px solid #D5C8B8;
+                background-color: #FFFEF9;
+            }
+            QCheckBox::indicator:checked {
+                background-color: #D4A574;
+                border-color: #D4A574;
+            }
+            QCheckBox::indicator:hover {
+                border-color: #D4A574;
+            }
+
+            /* 数字输入框 */
+            QSpinBox {
+                background-color: #FFFEF9;
+                border: 2px solid #E8DFD5;
+                border-radius: 10px;
+                padding: 8px 12px;
+                font-size: 14px;
+                color: #3D3428;
+            }
+            QSpinBox:focus {
+                border-color: #D4A574;
+            }
+            QSpinBox::up-button, QSpinBox::down-button {
+                background-color: #F5EDE4;
+                border: none;
+                width: 24px;
+                border-radius: 4px;
+            }
+            QSpinBox::up-button:hover, QSpinBox::down-button:hover {
+                background-color: #E8D5C0;
+            }
+
+            /* 分组框 */
+            QGroupBox {
+                color: #5A4A3A;
+                font-size: 14px;
+                font-weight: 600;
+                border: 2px solid #E8DFD5;
+                border-radius: 12px;
+                margin-top: 12px;
+                padding-top: 16px;
+                background-color: #FFFEF9;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                subcontrol-position: top left;
+                left: 16px;
+                padding: 0 8px;
+                background-color: #FFFEF9;
+            }
+
+            /* 标签页 */
+            QTabWidget::pane {
+                border: 2px solid #E8DFD5;
+                border-radius: 12px;
+                background-color: #FFFEF9;
+            }
+            QTabBar::tab {
+                background-color: #F5EDE4;
+                color: #5A4A3A;
+                padding: 10px 20px;
+                margin-right: 4px;
+                border-top-left-radius: 10px;
+                border-top-right-radius: 10px;
+            }
+            QTabBar::tab:selected {
+                background-color: #FFFEF9;
+                color: #8B5A2B;
+                font-weight: 600;
+            }
+            QTabBar::tab:hover:!selected {
+                background-color: #FBF7F2;
+            }
+
+            /* 对话框 */
+            QDialog {
+                background-color: #FBF7F2;
+            }
+
+            /* 提示框 */
+            QToolTip {
+                background-color: #3D3428;
+                color: #FFFEF9;
+                border: none;
+                border-radius: 8px;
+                padding: 8px 12px;
+                font-size: 13px;
             }
         """)
 
@@ -404,37 +633,22 @@ class MainWindow(QMainWindow):
         about_action.triggered.connect(self._on_about)
         help_menu.addAction(about_action)
 
-    def _init_toolbar(self) -> None:
-        """初始化工具栏"""
-        toolbar = QToolBar("主工具栏")
-        toolbar.setMovable(False)
-        self.addToolBar(toolbar)
-
-        # 新建笔记
-        new_action = QAction("新建", self)
-        new_action.setToolTip("新建笔记")
-        new_action.triggered.connect(self._on_new_note)
-        toolbar.addAction(new_action)
-
-        # 保存
-        save_action = QAction("保存", self)
-        save_action.setToolTip("保存当前笔记")
-        save_action.triggered.connect(self._on_save)
-        toolbar.addAction(save_action)
-
-        toolbar.addSeparator()
-
-        # 删除
-        delete_action = QAction("删除", self)
-        delete_action.setToolTip("删除当前笔记")
-        delete_action.triggered.connect(self._on_delete_note)
-        toolbar.addAction(delete_action)
-
     def _init_statusbar(self) -> None:
         """初始化状态栏"""
         self.statusbar = QStatusBar()
         self.setStatusBar(self.statusbar)
         self.statusbar.showMessage("就绪")
+
+        # 添加版本号到右下角
+        self.version_label = QLabel("v0.1.3")
+        self.version_label.setStyleSheet("""
+            QLabel {
+                color: #A09080;
+                font-size: 11px;
+                padding-right: 8px;
+            }
+        """)
+        self.statusbar.addPermanentWidget(self.version_label)
 
     def _connect_signals(self) -> None:
         """连接信号"""
@@ -442,6 +656,7 @@ class MainWindow(QMainWindow):
         self.sidebar.note_selected.connect(self._on_note_selected)
         self.sidebar.note_created.connect(self._on_note_created)
         self.sidebar.note_deleted.connect(self._on_note_deleted)
+        self.sidebar.note_moved.connect(self._on_note_moved)
 
         # 编辑器信号
         self.editor.content_changed.connect(self._on_content_changed)
@@ -490,6 +705,13 @@ class MainWindow(QMainWindow):
         """SKILL.md 生成完成回调"""
         if success:
             self.notification_bar.show_success(message)
+
+            # 触发文件夹 SKILL 更新（延迟模式）
+            if self._current_note and self._current_note.folder:
+                self._folder_skill_updater.mark_folder_dirty(
+                    self._current_note.folder,
+                    self._folder_skill_updater.MODE_DELAYED
+                )
         else:
             self.notification_bar.show_error(message)
 
@@ -500,6 +722,9 @@ class MainWindow(QMainWindow):
         """删除笔记"""
         if self._current_note is None:
             return
+
+        # 保存文件夹信息（删除前）
+        folder_name = self._current_note.folder
 
         reply = QMessageBox.question(
             self,
@@ -516,6 +741,13 @@ class MainWindow(QMainWindow):
             self.editor.clear()
             self.sidebar.refresh()
 
+            # 触发文件夹 SKILL 更新（立即模式）
+            if folder_name:
+                self._folder_skill_updater.mark_folder_dirty(
+                    folder_name,
+                    self._folder_skill_updater.MODE_IMMEDIATE
+                )
+
     @Slot(Note)
     def _on_note_selected(self, note: Note) -> None:
         """笔记被选中"""
@@ -525,6 +757,9 @@ class MainWindow(QMainWindow):
         content = note_manager.get_note_content(note.id)
         self.editor.set_content(content, note.title)
 
+        # 更新 AI 对话面板的笔记内容
+        self.chat_panel.set_current_note(note.title, content)
+
         self.statusbar.showMessage(f"已打开: {note.title}")
 
     @Slot(Note)
@@ -532,6 +767,10 @@ class MainWindow(QMainWindow):
         """笔记被创建"""
         self._current_note = note
         self.editor.set_content("", note.title)
+
+        # 更新 AI 对话面板
+        self.chat_panel.set_current_note(note.title, "")
+
         self.statusbar.showMessage(f"已创建: {note.title}")
 
     @Slot(str)
@@ -540,6 +779,25 @@ class MainWindow(QMainWindow):
         if self._current_note and self._current_note.id == note_id:
             self._current_note = None
             self.editor.clear()
+
+    @Slot(str, str, str)
+    def _on_note_moved(self, note_id: str, old_folder: str, new_folder: str) -> None:
+        """笔记被移动"""
+        self.notification_bar.show_progress(f"正在移动笔记...")
+
+        # 触发两个文件夹的 SKILL.md 更新（立即模式）
+        if old_folder:
+            self._folder_skill_updater.mark_folder_dirty(
+                old_folder,
+                self._folder_skill_updater.MODE_IMMEDIATE
+            )
+        if new_folder and new_folder != old_folder:
+            self._folder_skill_updater.mark_folder_dirty(
+                new_folder,
+                self._folder_skill_updater.MODE_IMMEDIATE
+            )
+
+        self.notification_bar.show_success(f"笔记已移动到「{new_folder or '根目录'}」")
 
     @Slot()
     def _on_content_changed(self) -> None:
@@ -585,6 +843,16 @@ class MainWindow(QMainWindow):
     def _toggle_chat_panel(self) -> None:
         """切换 AI 对话面板显示"""
         self.chat_panel.setVisible(not self.chat_panel.isVisible())
+
+    @Slot(str)
+    def _on_folder_skill_updated(self, folder_name: str) -> None:
+        """文件夹 SKILL 更新完成"""
+        self.statusbar.showMessage(f"文件夹「{folder_name}」概要已更新", 3000)
+
+    @Slot(str, str)
+    def _on_folder_skill_error(self, folder_name: str, error: str) -> None:
+        """文件夹 SKILL 更新错误"""
+        self.notification_bar.show_error(f"更新文件夹「{folder_name}」概要失败: {error}")
 
     def closeEvent(self, event: Any) -> None:
         """窗口关闭事件"""

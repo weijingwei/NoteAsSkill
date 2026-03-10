@@ -40,6 +40,12 @@ class Config:
             "font_size": 14,
             "preview_mode": "split",
         },
+        "folder_skill": {
+            "enabled": True,                    # 是否启用文件夹 SKILL
+            "auto_update": True,                # 是否自动更新
+            "update_delay": 30,                 # 延迟更新时间（秒）
+            "generation_mode": "hybrid",        # simple | ai | hybrid
+        },
     }
 
     def __init__(self, config_path: Path | None = None):
@@ -201,6 +207,44 @@ class Config:
     @preview_mode.setter
     def preview_mode(self, value: str) -> None:
         self.set("editor.preview_mode", value)
+
+    # ==================== 文件夹 SKILL 配置 ====================
+
+    @property
+    def folder_skill_enabled(self) -> bool:
+        """是否启用文件夹 SKILL"""
+        return self.get("folder_skill.enabled", True)
+
+    @folder_skill_enabled.setter
+    def folder_skill_enabled(self, value: bool) -> None:
+        self.set("folder_skill.enabled", value)
+
+    @property
+    def folder_skill_auto_update(self) -> bool:
+        """是否自动更新文件夹 SKILL"""
+        return self.get("folder_skill.auto_update", True)
+
+    @folder_skill_auto_update.setter
+    def folder_skill_auto_update(self, value: bool) -> None:
+        self.set("folder_skill.auto_update", value)
+
+    @property
+    def folder_skill_update_delay(self) -> int:
+        """文件夹 SKILL 延迟更新时间（秒）"""
+        return self.get("folder_skill.update_delay", 30)
+
+    @folder_skill_update_delay.setter
+    def folder_skill_update_delay(self, value: int) -> None:
+        self.set("folder_skill.update_delay", value)
+
+    @property
+    def folder_skill_generation_mode(self) -> str:
+        """文件夹 SKILL 生成模式：simple | ai | hybrid"""
+        return self.get("folder_skill.generation_mode", "hybrid")
+
+    @folder_skill_generation_mode.setter
+    def folder_skill_generation_mode(self, value: str) -> None:
+        self.set("folder_skill.generation_mode", value)
 
 
 # 全局配置实例

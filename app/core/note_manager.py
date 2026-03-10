@@ -57,6 +57,10 @@ class Folder:
     name: str
     path: Path
     parent: str = ""
+    # 渐进式披露相关属性
+    skill_hash: str = ""           # SKILL.md 文件的 hash 标识
+    children_hash: str = ""        # 子项内容 hash（用于检测变化）
+    pending_update: bool = False   # 是否有待更新
 
     def to_dict(self) -> dict[str, Any]:
         """转换为字典"""
@@ -64,6 +68,9 @@ class Folder:
             "name": self.name,
             "path": str(self.path),
             "parent": self.parent,
+            "skill_hash": self.skill_hash,
+            "children_hash": self.children_hash,
+            "pending_update": self.pending_update,
         }
 
     @classmethod
@@ -73,6 +80,9 @@ class Folder:
             name=data["name"],
             path=Path(data["path"]),
             parent=data.get("parent", ""),
+            skill_hash=data.get("skill_hash", ""),
+            children_hash=data.get("children_hash", ""),
+            pending_update=data.get("pending_update", False),
         )
 
 

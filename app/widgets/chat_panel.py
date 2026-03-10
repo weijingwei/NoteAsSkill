@@ -1,6 +1,7 @@
 """AI 对话面板模块
 
 提供 SKILL 生成、笔记问答和通用对话功能。
+支持流式输出和思考状态显示。
 """
 
 from typing import Any
@@ -10,7 +11,6 @@ from PySide6.QtWidgets import (
     QComboBox,
     QHBoxLayout,
     QLabel,
-    QLineEdit,
     QListWidget,
     QListWidgetItem,
     QPushButton,
@@ -23,24 +23,37 @@ from ..ai.client import create_client
 from ..core.config import get_config
 
 
-class ChatWorker(QThread):
-    """AI 聊天工作线程"""
+class StreamChatWorker(QThread):
+    """流式 AI 聊天工作线程"""
 
-    response_ready = Signal(str)
-    error_occurred = Signal(str)
+    chunk_received = Signal(str)  # 收到内容片段
+    thinking_started = Signal()  # 开始思考
+    thinking_ended = Signal()  # 思考结束
+    finished_with_error = Signal(str)  # 完成但出错
 
-    def __init__(self, client: Any, messages: list[dict[str, str]]):
+    def __init__(self, client: Any, messages: list[dict[str, str]], use_stream: bool = True):
         super().__init__()
         self.client = client
         self.messages = messages
+        self.use_stream = use_stream
 
     def run(self) -> None:
         """运行聊天请求"""
         try:
-            response = self.client.chat(self.messages)
-            self.response_ready.emit(response)
+            if self.use_stream:
+                self.thinking_started.emit()
+                full_response = ""
+                for chunk in self.client.chat_stream(self.messages):
+                    full_response += chunk
+                    self.chunk_received.emit(chunk)
+                self.thinking_ended.emit()
+            else:
+                self.thinking_started.emit()
+                response = self.client.chat(self.messages)
+                self.thinking_ended.emit()
+                self.chunk_received.emit(response)
         except Exception as e:
-            self.error_occurred.emit(str(e))
+            self.finished_with_error.emit(str(e))
 
 
 class ChatPanel(QWidget):
@@ -57,7 +70,11 @@ class ChatPanel(QWidget):
 
         self._client: Any = None
         self._messages: list[dict[str, str]] = []
-        self._worker: ChatWorker | None = None
+        self._worker: StreamChatWorker | None = None
+        self._current_note_content: str = ""
+        self._current_note_title: str = ""
+        self._current_response: str = ""  # 当前正在生成的响应
+        self._thinking_item: QListWidgetItem | None = None  # 思考中提示项
 
         self._init_ui()
         self._connect_signals()
@@ -126,7 +143,10 @@ class ChatPanel(QWidget):
         if mode == self.MODE_SKILL:
             self.input_edit.setPlaceholderText("点击发送按钮生成 SKILL.md...")
         elif mode == self.MODE_QA:
-            self.input_edit.setPlaceholderText("输入关于当前笔记的问题...")
+            if self._current_note_title:
+                self.input_edit.setPlaceholderText(f"关于「{self._current_note_title}」提问...")
+            else:
+                self.input_edit.setPlaceholderText("请先选择一篇笔记...")
         else:
             self.input_edit.setPlaceholderText("开始对话...")
 
@@ -150,8 +170,8 @@ class ChatPanel(QWidget):
         # 添加到消息历史
         self._messages.append({"role": "user", "content": user_input})
 
-        # 发送到 AI
-        self._send_to_ai()
+        # 发送到 AI（流式）
+        self._send_to_ai_stream()
 
     @Slot()
     def _on_clear(self) -> None:
@@ -159,11 +179,10 @@ class ChatPanel(QWidget):
         self._messages = []
         self.message_list.clear()
 
-    def _add_message(self, sender: str, content: str, is_user: bool = False) -> None:
+    def _add_message(self, sender: str, content: str, is_user: bool = False) -> QListWidgetItem:
         """添加消息到列表"""
         item = QListWidgetItem()
 
-        # 格式化消息
         prefix = "👤 " if is_user else "🤖 "
         display_text = f"{prefix}{sender}:\n{content}"
 
@@ -172,9 +191,25 @@ class ChatPanel(QWidget):
 
         self.message_list.addItem(item)
         self.message_list.scrollToBottom()
+        return item
 
-    def _send_to_ai(self) -> None:
-        """发送消息到 AI"""
+    def _show_thinking(self) -> None:
+        """显示思考中状态"""
+        self._thinking_item = QListWidgetItem("🤖 AI: ⋯ 思考中 ⋯")
+        self._thinking_item.setData(Qt.ItemDataRole.UserRole, {"thinking": True})
+        self.message_list.addItem(self._thinking_item)
+        self.message_list.scrollToBottom()
+
+    def _hide_thinking(self) -> None:
+        """隐藏思考中状态"""
+        if self._thinking_item:
+            row = self.message_list.row(self._thinking_item)
+            if row >= 0:
+                self.message_list.takeItem(row)
+            self._thinking_item = None
+
+    def _send_to_ai_stream(self) -> None:
+        """发送消息到 AI（流式）"""
         if self._client is None:
             self._add_message("系统", "请先配置 AI 设置", is_user=False)
             return
@@ -184,27 +219,78 @@ class ChatPanel(QWidget):
             return
 
         self.send_button.setEnabled(False)
+        self._current_response = ""
 
-        self._worker = ChatWorker(self._client, self._messages)
-        self._worker.response_ready.connect(self._on_response)
-        self._worker.error_occurred.connect(self._on_error)
-        self._worker.finished.connect(self._on_finished)
+        # 显示思考中状态
+        self._show_thinking()
+
+        # 构建消息
+        messages = self._messages.copy()
+        if self.mode_combo.currentText() == self.MODE_QA and self._current_note_content:
+            context = f"""当前笔记：「{self._current_note_title}」
+
+笔记内容：
+{self._current_note_content}
+
+---
+请基于以上笔记内容回答用户的问题。"""
+            messages = [{"role": "system", "content": context}] + messages
+
+        self._worker = StreamChatWorker(self._client, messages, use_stream=True)
+        self._worker.thinking_started.connect(lambda: None)  # 已在上面显示
+        self._worker.thinking_ended.connect(self._hide_thinking)
+        self._worker.chunk_received.connect(self._on_chunk_received)
+        self._worker.finished_with_error.connect(self._on_error)
+        self._worker.finished.connect(self._on_stream_finished)
         self._worker.start()
 
     @Slot(str)
-    def _on_response(self, response: str) -> None:
-        """收到响应"""
-        self._add_message("AI", response, is_user=False)
-        self._messages.append({"role": "assistant", "content": response})
+    def _on_chunk_received(self, chunk: str) -> None:
+        """收到内容片段"""
+        self._current_response += chunk
+
+        # 更新或创建 AI 消息项
+        if self._thinking_item:
+            # 将思考项转换为响应项
+            self._thinking_item.setText(f"🤖 AI:\n{self._current_response}")
+            self._thinking_item.setData(Qt.ItemDataRole.UserRole, {
+                "sender": "AI",
+                "content": self._current_response,
+                "is_user": False
+            })
+            self._thinking_item = None  # 不再是思考项
+        else:
+            # 更新最后一个 AI 消息
+            for i in range(self.message_list.count() - 1, -1, -1):
+                item = self.message_list.item(i)
+                data = item.data(Qt.ItemDataRole.UserRole)
+                if data and not data.get("is_user", False) and not data.get("thinking", False):
+                    item.setText(f"🤖 AI:\n{self._current_response}")
+                    item.setData(Qt.ItemDataRole.UserRole, {
+                        "sender": "AI",
+                        "content": self._current_response,
+                        "is_user": False
+                    })
+                    break
+
+        self.message_list.scrollToBottom()
+
+    @Slot()
+    def _on_stream_finished(self) -> None:
+        """流式响应完成"""
+        self.send_button.setEnabled(True)
+
+        # 将完整响应添加到消息历史
+        if self._current_response:
+            self._messages.append({"role": "assistant", "content": self._current_response})
+
+        self._worker = None
 
     @Slot(str)
     def _on_error(self, error: str) -> None:
         """发生错误"""
+        self._hide_thinking()
         self._add_message("错误", error, is_user=False)
-
-    @Slot()
-    def _on_finished(self) -> None:
-        """请求完成"""
         self.send_button.setEnabled(True)
 
     def generate_skill(self, note_content: str) -> None:
@@ -214,8 +300,8 @@ class ChatPanel(QWidget):
             return
 
         self._add_message("用户", "生成 SKILL.md", is_user=True)
+        self._show_thinking()
 
-        # 构建提示
         prompt = f"""请分析以下笔记内容，生成一个结构化的 SKILL 描述。
 
 笔记内容：
@@ -229,19 +315,25 @@ class ChatPanel(QWidget):
 """
 
         messages = [{"role": "user", "content": prompt}]
+        self._current_response = ""
 
-        self.send_button.setEnabled(False)
-
-        self._worker = ChatWorker(self._client, messages)
-        self._worker.response_ready.connect(self._on_skill_response)
-        self._worker.error_occurred.connect(self._on_error)
-        self._worker.finished.connect(self._on_finished)
+        self._worker = StreamChatWorker(self._client, messages, use_stream=True)
+        self._worker.thinking_ended.connect(self._hide_thinking)
+        self._worker.chunk_received.connect(self._on_chunk_received)
+        self._worker.finished_with_error.connect(self._on_error)
+        self._worker.finished.connect(self._on_stream_finished)
         self._worker.start()
 
-    @Slot(str)
-    def _on_skill_response(self, response: str) -> None:
-        """收到 SKILL 响应"""
-        self._add_message("AI", f"生成的 SKILL:\n\n{response}", is_user=False)
+    def set_current_note(self, title: str, content: str) -> None:
+        """设置当前笔记内容"""
+        self._current_note_title = title
+        self._current_note_content = content
+
+        if self.mode_combo.currentText() == self.MODE_QA:
+            if title:
+                self.input_edit.setPlaceholderText(f"关于「{title}」提问...")
+            else:
+                self.input_edit.setPlaceholderText("请先选择一篇笔记...")
 
     def reload_client(self) -> None:
         """重新加载客户端"""
