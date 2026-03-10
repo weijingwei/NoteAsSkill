@@ -163,28 +163,6 @@ class Sidebar(QWidget):
         self.folder_tree.setHeaderHidden(True)
         self.folder_tree.setMaximumHeight(200)
         self.folder_tree.setIndentation(16)
-        # 设置背景色与整体风格一致
-        self.folder_tree.setStyleSheet("""
-            QTreeWidget {
-                background-color: #FFFEF9;
-                border: 1px solid #E8DFD5;
-                border-radius: 12px;
-                padding: 8px;
-            }
-            QTreeWidget::item {
-                padding: 6px 8px;
-                border-radius: 6px;
-                color: #4A3F35;
-            }
-            QTreeWidget::item:selected {
-                background-color: #FDF6ED;
-                color: #8B5A2B;
-                border: 1px solid #D4A574;
-            }
-            QTreeWidget::item:hover:!selected {
-                background-color: #FDF8F0;
-            }
-        """)
         layout.addWidget(self.folder_tree)
 
         # 笔记列表标题

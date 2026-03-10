@@ -10,9 +10,11 @@ from PySide6.QtCore import QSettings, Qt, Slot, QThread, Signal
 from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import (
     QApplication,
+    QHBoxLayout,
     QLabel,
     QMainWindow,
     QMessageBox,
+    QPushButton,
     QSplitter,
     QStatusBar,
     QToolBar,
@@ -152,8 +154,6 @@ class MainWindow(QMainWindow):
         self.toggle_sidebar_btn.triggered.connect(self._toggle_sidebar)
         self.sidebar_toolbar.addAction(self.toggle_sidebar_btn)
 
-        self.sidebar_toolbar.addSeparator()
-
         # 添加工具栏按钮
         new_action = QAction("新建", self)
         new_action.setToolTip("新建笔记")
@@ -214,6 +214,46 @@ class MainWindow(QMainWindow):
 
         main_layout.addWidget(self.splitter)
 
+        # 左侧浮动展开按钮（当sidebar隐藏时显示）
+        self.left_expand_btn = QPushButton("▶", self)
+        self.left_expand_btn.setFixedSize(24, 60)
+        self.left_expand_btn.setToolTip("展开侧边栏")
+        self.left_expand_btn.clicked.connect(self._toggle_sidebar)
+        self.left_expand_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #FBF7F2;
+                border: 1px solid #E8DFD5;
+                border-radius: 4px;
+                color: #8B5A2B;
+                font-size: 12px;
+            }
+            QPushButton:hover {
+                background-color: #FDF6ED;
+                border-color: #D4A574;
+            }
+        """)
+        self.left_expand_btn.hide()
+
+        # 右侧浮动展开按钮（当chat面板隐藏时显示）
+        self.right_expand_btn = QPushButton("◀", self)
+        self.right_expand_btn.setFixedSize(24, 60)
+        self.right_expand_btn.setToolTip("展开 AI 对话")
+        self.right_expand_btn.clicked.connect(self._toggle_chat_panel)
+        self.right_expand_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #FBF7F2;
+                border: 1px solid #E8DFD5;
+                border-radius: 4px;
+                color: #8B5A2B;
+                font-size: 12px;
+            }
+            QPushButton:hover {
+                background-color: #FDF6ED;
+                border-color: #D4A574;
+            }
+        """)
+        self.right_expand_btn.hide()
+
         # 应用统一样式
         self._apply_style()
 
@@ -268,6 +308,52 @@ class MainWindow(QMainWindow):
                 color: #4A3F35;
                 font-size: 14px;
                 border: 1px solid transparent;
+            }
+            QListWidget::item:selected {
+                background-color: #FDF6ED;
+                color: #8B5A2B;
+                border: 1px solid #D4A574;
+                font-weight: 500;
+            }
+            QListWidget::item:hover:!selected {
+                background-color: #FDF8F0;
+                border: 1px solid #E8D5C0;
+            }
+
+            /* 树形控件 - 文件夹列表 */
+            QTreeWidget {
+                background-color: #FFFEF9;
+                border: 1px solid #E8DFD5;
+                border-radius: 12px;
+                padding: 8px;
+            }
+            QTreeWidget::item {
+                padding: 6px 8px;
+                border-radius: 6px;
+                color: #4A3F35;
+            }
+            QTreeWidget::item:selected {
+                background-color: #FDF6ED;
+                color: #8B5A2B;
+                border: 1px solid #D4A574;
+            }
+            QTreeWidget::item:hover:!selected {
+                background-color: #FDF8F0;
+            }
+            QTreeWidget::branch {
+                background-color: transparent;
+            }
+            QTreeWidget::branch:has-children:!has-siblings:closed,
+            QTreeWidget::branch:closed:has-children:has-siblings {
+                background-color: #FDF8F0;
+                border: 1px solid #E8DFD5;
+                border-radius: 4px;
+            }
+            QTreeWidget::branch:open:has-children:!has-siblings,
+            QTreeWidget::branch:open:has-children:has-siblings {
+                background-color: #FDF8F0;
+                border: 1px solid #E8DFD5;
+                border-radius: 4px;
             }
             QListWidget::item:selected {
                 background-color: #FDF6ED;
@@ -690,7 +776,7 @@ class MainWindow(QMainWindow):
         self.statusbar.showMessage("就绪")
 
         # 添加版本号到右下角
-        self.version_label = QLabel("v0.1.5")
+        self.version_label = QLabel("v0.1.6")
         self.version_label.setStyleSheet("""
             QLabel {
                 color: #A09080;
@@ -918,10 +1004,13 @@ class MainWindow(QMainWindow):
             self.sidebar_container.hide()
             self.toggle_sidebar_btn.setText("▶")
             self.toggle_sidebar_btn.setToolTip("展开侧边栏")
+            self.left_expand_btn.show()
+            self._update_floating_buttons()
         else:
             self.sidebar_container.show()
             self.toggle_sidebar_btn.setText("◀")
             self.toggle_sidebar_btn.setToolTip("收起侧边栏")
+            self.left_expand_btn.hide()
 
     @Slot()
     def _toggle_chat_panel(self) -> None:
@@ -930,10 +1019,31 @@ class MainWindow(QMainWindow):
             self.chat_container.hide()
             self.toggle_chat_btn.setText("◀")
             self.toggle_chat_btn.setToolTip("展开 AI 对话")
+            self.right_expand_btn.show()
+            self._update_floating_buttons()
         else:
             self.chat_container.show()
             self.toggle_chat_btn.setText("▶")
             self.toggle_chat_btn.setToolTip("收起 AI 对话")
+            self.right_expand_btn.hide()
+
+    def _update_floating_buttons(self) -> None:
+        """更新浮动按钮位置"""
+        splitter_geo = self.splitter.geometry()
+        btn_height = self.left_expand_btn.height()
+        y_pos = splitter_geo.top() + (splitter_geo.height() - btn_height) // 2
+
+        # 左侧按钮
+        self.left_expand_btn.move(0, y_pos)
+
+        # 右侧按钮
+        right_x = self.width() - self.right_expand_btn.width()
+        self.right_expand_btn.move(right_x, y_pos)
+
+    def resizeEvent(self, event: Any) -> None:
+        """窗口大小改变事件"""
+        super().resizeEvent(event)
+        self._update_floating_buttons()
 
     @Slot(str)
     def _on_folder_skill_updated(self, folder_name: str) -> None:
