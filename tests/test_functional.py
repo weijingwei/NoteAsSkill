@@ -167,7 +167,7 @@ def test_existing_data():
     print("\n=== 测试现有数据 ===")
     result = TestResult()
 
-    notebook_path = Path(r"D:\claudeProjects\node_as_skill\notebook")
+    notebook_path = Path(__file__).parent.parent / "notebook"
 
     if not notebook_path.exists():
         print("  跳过: notebook 目录不存在")

@@ -11,8 +11,8 @@ from pathlib import Path
 
 # 配置
 PYTHON_PATH = r"D:\ProgramData\miniconda3\envs\noteasskill\python.exe"
-APP_PATH = r"D:\claudeProjects\node_as_skill\main.py"
-SCREENSHOTS_DIR = Path(r"D:\claudeProjects\node_as_skill\tests\screenshots")
+APP_PATH = str(Path(__file__).parent.parent / "main.py")
+SCREENSHOTS_DIR = Path(__file__).parent / "screenshots"
 
 # 安全设置
 pyautogui.PAUSE = 0.5
@@ -72,7 +72,7 @@ class NoteAsSkillTester:
         self.process = None
         self.window = None
         self.test_results = []
-        self.notebook_path = Path(r"D:\claudeProjects\node_as_skill\notebook")
+        self.notebook_path = Path(__file__).parent.parent / "notebook"
 
     def start_app(self):
         """启动应用"""
