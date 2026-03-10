@@ -1,0 +1,20 @@
+ai:
+  anthropic:
+    api_key: sk-sp-72748e4134fa481c9cdebbe88cdb6cea
+    base_url: https://coding.dashscope.aliyuncs.com/apps/anthropic
+    model: glm-5
+  ollama:
+    base_url: http://localhost:11434
+    model: llama2
+  openai:
+    api_key: sk-sp-72748e4134fa481c9cdebbe88cdb6cea
+    base_url: https://coding.dashscope.aliyuncs.com/v1
+    model: glm-5
+  provider: anthropic
+app:
+  auto_save: true
+  auto_save_interval: 30
+  theme: light
+editor:
+  font_size: 14
+  preview_mode: split
