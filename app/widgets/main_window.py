@@ -134,8 +134,9 @@ class MainWindow(QMainWindow):
         self.splitter = QSplitter(Qt.Horizontal)
 
         # 左侧：笔记列表（包含工具栏）
-        sidebar_container = QWidget()
-        sidebar_layout = QVBoxLayout(sidebar_container)
+        self.sidebar_container = QWidget()
+        self.sidebar_container.setMinimumWidth(200)  # 设置最小宽度
+        sidebar_layout = QVBoxLayout(self.sidebar_container)
         sidebar_layout.setContentsMargins(0, 0, 0, 0)
         sidebar_layout.setSpacing(0)
 
@@ -144,6 +145,14 @@ class MainWindow(QMainWindow):
         self.sidebar_toolbar.setMovable(False)
         self.sidebar_toolbar.setFixedHeight(36)
         sidebar_layout.addWidget(self.sidebar_toolbar)
+
+        # 添加展开/关闭侧边栏按钮
+        self.toggle_sidebar_btn = QAction("◀", self)
+        self.toggle_sidebar_btn.setToolTip("收起侧边栏")
+        self.toggle_sidebar_btn.triggered.connect(self._toggle_sidebar)
+        self.sidebar_toolbar.addAction(self.toggle_sidebar_btn)
+
+        self.sidebar_toolbar.addSeparator()
 
         # 添加工具栏按钮
         new_action = QAction("新建", self)
@@ -171,15 +180,34 @@ class MainWindow(QMainWindow):
         self.sidebar = Sidebar()
         sidebar_layout.addWidget(self.sidebar)
 
-        self.splitter.addWidget(sidebar_container)
+        self.splitter.addWidget(self.sidebar_container)
 
         # 中间：编辑器
         self.editor = Editor()
+        self.editor.setMinimumWidth(300)  # 设置最小宽度
         self.splitter.addWidget(self.editor)
 
         # 右侧：AI 对话
+        self.chat_container = QWidget()
+        self.chat_container.setMinimumWidth(250)  # 设置最小宽度
+        chat_container_layout = QVBoxLayout(self.chat_container)
+        chat_container_layout.setContentsMargins(0, 0, 0, 0)
+        chat_container_layout.setSpacing(0)
+
+        # 右侧工具栏（包含展开/关闭按钮）
+        chat_toolbar = QToolBar()
+        chat_toolbar.setMovable(False)
+        chat_toolbar.setFixedHeight(36)
+        self.toggle_chat_btn = QAction("▶", self)
+        self.toggle_chat_btn.setToolTip("收起 AI 对话")
+        self.toggle_chat_btn.triggered.connect(self._toggle_chat_panel)
+        chat_toolbar.addAction(self.toggle_chat_btn)
+        chat_container_layout.addWidget(chat_toolbar)
+
         self.chat_panel = ChatPanel()
-        self.splitter.addWidget(self.chat_panel)
+        chat_container_layout.addWidget(self.chat_panel)
+
+        self.splitter.addWidget(self.chat_container)
 
         # 设置分割比例
         self.splitter.setSizes([250, 600, 350])
@@ -319,8 +347,10 @@ class MainWindow(QMainWindow):
                 border: 2px solid #E8DFD5;
                 border-radius: 10px;
                 padding: 10px 16px;
+                padding-right: 36px;
                 font-size: 14px;
                 color: #3D3428;
+                min-width: 100px;
             }
             QComboBox:focus {
                 border-color: #D4A574;
@@ -328,10 +358,13 @@ class MainWindow(QMainWindow):
             QComboBox:hover {
                 border-color: #D4C4B0;
             }
+            QComboBox:on {
+                border-color: #D4A574;
+            }
             QComboBox::drop-down {
                 border: none;
                 width: 32px;
-                padding-right: 8px;
+                subcontrol-position: center right;
             }
             QComboBox::down-arrow {
                 image: none;
@@ -346,6 +379,19 @@ class MainWindow(QMainWindow):
                 padding: 8px;
                 selection-background-color: #FDF6ED;
                 selection-color: #8B5A2B;
+                outline: none;
+            }
+            QComboBox QAbstractItemView::item {
+                padding: 8px 12px;
+                border-radius: 6px;
+                color: #3D3428;
+            }
+            QComboBox QAbstractItemView::item:hover {
+                background-color: #FDF8F0;
+            }
+            QComboBox QAbstractItemView::item:selected {
+                background-color: #FDF6ED;
+                color: #8B5A2B;
             }
 
             /* 标签 - 温暖的文字 */
@@ -644,7 +690,7 @@ class MainWindow(QMainWindow):
         self.statusbar.showMessage("就绪")
 
         # 添加版本号到右下角
-        self.version_label = QLabel("v0.1.3")
+        self.version_label = QLabel("v0.1.4")
         self.version_label.setStyleSheet("""
             QLabel {
                 color: #A09080;
@@ -868,12 +914,26 @@ class MainWindow(QMainWindow):
     @Slot()
     def _toggle_sidebar(self) -> None:
         """切换侧边栏显示"""
-        self.sidebar.setVisible(not self.sidebar.isVisible())
+        if self.sidebar_container.isVisible():
+            self.sidebar_container.hide()
+            self.toggle_sidebar_btn.setText("▶")
+            self.toggle_sidebar_btn.setToolTip("展开侧边栏")
+        else:
+            self.sidebar_container.show()
+            self.toggle_sidebar_btn.setText("◀")
+            self.toggle_sidebar_btn.setToolTip("收起侧边栏")
 
     @Slot()
     def _toggle_chat_panel(self) -> None:
         """切换 AI 对话面板显示"""
-        self.chat_panel.setVisible(not self.chat_panel.isVisible())
+        if self.chat_container.isVisible():
+            self.chat_container.hide()
+            self.toggle_chat_btn.setText("◀")
+            self.toggle_chat_btn.setToolTip("展开 AI 对话")
+        else:
+            self.chat_container.show()
+            self.toggle_chat_btn.setText("▶")
+            self.toggle_chat_btn.setToolTip("收起 AI 对话")
 
     @Slot(str)
     def _on_folder_skill_updated(self, folder_name: str) -> None:
