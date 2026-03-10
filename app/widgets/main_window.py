@@ -79,7 +79,7 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
 
-        self.setWindowTitle("NoteAsSkil - 笔技")
+        self.setWindowTitle("NoteAsSkill - 笔技")
         self.setMinimumSize(1200, 800)
         self.setMouseTracking(True)  # 启用鼠标追踪，用于边缘检测
 
@@ -327,7 +327,7 @@ class MainWindow(QMainWindow):
         """应用统一样式 - Editorial Warm 设计风格"""
         self.setStyleSheet("""
             /* ========================================
-               NoteAsSkil - Editorial Warm Theme
+               NoteAsSkill - Editorial Warm Theme
                温暖的编辑风格，如同精致的纸质笔记本
                ======================================== */
 

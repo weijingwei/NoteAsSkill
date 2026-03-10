@@ -1,4 +1,4 @@
-# NoteAsSkil - 笔技
+# NoteAsSkill - 笔技
 
 一个将笔记自动转换为 Claude Code Skill 的桌面应用。
 
