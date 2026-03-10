@@ -21,7 +21,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from ..core.config import get_config
+from ..core.config import get_config, get_version
 from ..core.note_manager import Note, get_note_manager
 from ..core.folder_skill_updater import get_folder_skill_updater
 from .chat_panel import ChatPanel
@@ -842,7 +842,7 @@ class MainWindow(QMainWindow):
         self.statusbar.showMessage("就绪")
 
         # 添加版本号到右下角
-        self.version_label = QLabel("v0.2.5")
+        self.version_label = QLabel(get_version())
         self.version_label.setStyleSheet("""
             QLabel {
                 color: #A09080;

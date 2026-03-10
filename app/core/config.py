@@ -305,6 +305,18 @@ class Config:
 _config: Config | None = None
 
 
+def get_version() -> str:
+    """获取应用版本号
+
+    Returns:
+        版本号字符串，如 "v0.2.5"
+    """
+    version_path = Path(__file__).parent.parent.parent / "version.txt"
+    if version_path.exists():
+        return version_path.read_text(encoding="utf-8").strip()
+    return "v0.0.0"
+
+
 def get_config() -> Config:
     """获取全局配置实例"""
     global _config
