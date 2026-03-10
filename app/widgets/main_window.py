@@ -82,6 +82,7 @@ class MainWindow(QMainWindow):
 
         self.setWindowTitle("NoteAsSkil - 笔技")
         self.setMinimumSize(1200, 800)
+        self.setMouseTracking(True)  # 启用鼠标追踪，用于边缘检测
 
         # 加载设置
         self.settings = QSettings("NoteAsSkill", "NoteAsSkill")
@@ -214,18 +215,18 @@ class MainWindow(QMainWindow):
 
         main_layout.addWidget(self.splitter)
 
-        # 左侧浮动展开按钮（当sidebar隐藏时显示）
+        # 左侧浮动展开按钮（当sidebar隐藏时，鼠标经过左边缘显示）
         self.left_expand_btn = QPushButton("▶", self)
-        self.left_expand_btn.setFixedSize(24, 60)
+        self.left_expand_btn.setFixedSize(20, 50)
         self.left_expand_btn.setToolTip("展开侧边栏")
         self.left_expand_btn.clicked.connect(self._toggle_sidebar)
         self.left_expand_btn.setStyleSheet("""
             QPushButton {
-                background-color: #FBF7F2;
+                background-color: rgba(251, 247, 242, 200);
                 border: 1px solid #E8DFD5;
-                border-radius: 4px;
+                border-radius: 0 4px 4px 0;
                 color: #8B5A2B;
-                font-size: 12px;
+                font-size: 10px;
             }
             QPushButton:hover {
                 background-color: #FDF6ED;
@@ -234,18 +235,18 @@ class MainWindow(QMainWindow):
         """)
         self.left_expand_btn.hide()
 
-        # 右侧浮动展开按钮（当chat面板隐藏时显示）
+        # 右侧浮动展开按钮（当chat面板隐藏时，鼠标经过右边缘显示）
         self.right_expand_btn = QPushButton("◀", self)
-        self.right_expand_btn.setFixedSize(24, 60)
+        self.right_expand_btn.setFixedSize(20, 50)
         self.right_expand_btn.setToolTip("展开 AI 对话")
         self.right_expand_btn.clicked.connect(self._toggle_chat_panel)
         self.right_expand_btn.setStyleSheet("""
             QPushButton {
-                background-color: #FBF7F2;
+                background-color: rgba(251, 247, 242, 200);
                 border: 1px solid #E8DFD5;
-                border-radius: 4px;
+                border-radius: 4px 0 0 4px;
                 color: #8B5A2B;
-                font-size: 12px;
+                font-size: 10px;
             }
             QPushButton:hover {
                 background-color: #FDF6ED;
@@ -253,6 +254,10 @@ class MainWindow(QMainWindow):
             }
         """)
         self.right_expand_btn.hide()
+
+        # 记录浮动按钮是否应该可见
+        self._left_btn_should_show = False
+        self._right_btn_should_show = False
 
         # 应用统一样式
         self._apply_style()
@@ -431,12 +436,12 @@ class MainWindow(QMainWindow):
             QComboBox {
                 background-color: #FFFEF9;
                 border: 2px solid #E8DFD5;
-                border-radius: 10px;
-                padding: 10px 16px;
-                padding-right: 36px;
-                font-size: 14px;
+                border-radius: 8px;
+                padding: 6px 12px;
+                padding-right: 28px;
+                font-size: 13px;
                 color: #3D3428;
-                min-width: 100px;
+                min-width: 80px;
             }
             QComboBox:focus {
                 border-color: #D4A574;
@@ -449,27 +454,28 @@ class MainWindow(QMainWindow):
             }
             QComboBox::drop-down {
                 border: none;
-                width: 32px;
+                width: 24px;
                 subcontrol-position: center right;
+                background: transparent;
             }
             QComboBox::down-arrow {
                 image: none;
-                border-left: 5px solid transparent;
-                border-right: 5px solid transparent;
-                border-top: 6px solid #8B5A2B;
+                border-left: 4px solid transparent;
+                border-right: 4px solid transparent;
+                border-top: 5px solid #8B5A2B;
             }
             QComboBox QAbstractItemView {
                 background-color: #FFFEF9;
                 border: 2px solid #D4A574;
-                border-radius: 10px;
-                padding: 8px;
+                border-radius: 8px;
+                padding: 4px;
                 selection-background-color: #FDF6ED;
                 selection-color: #8B5A2B;
                 outline: none;
             }
             QComboBox QAbstractItemView::item {
-                padding: 8px 12px;
-                border-radius: 6px;
+                padding: 6px 10px;
+                border-radius: 4px;
                 color: #3D3428;
             }
             QComboBox QAbstractItemView::item:hover {
@@ -533,19 +539,19 @@ class MainWindow(QMainWindow):
             QToolBar {
                 background-color: #FBF7F2;
                 border-bottom: 1px solid #E8DFD5;
-                padding: 2px 8px;
-                spacing: 4px;
+                padding: 2px 4px;
+                spacing: 2px;
                 min-height: 32px;
             }
             QToolBar QToolButton {
                 background-color: transparent;
                 border: 1px solid transparent;
-                border-radius: 6px;
-                padding: 4px 10px;
+                border-radius: 4px;
+                padding: 2px 6px;
                 color: #5A4A3A;
                 font-size: 12px;
                 font-weight: 500;
-                min-height: 24px;
+                min-height: 22px;
             }
             QToolBar QToolButton:hover {
                 background-color: #FDF6ED;
@@ -776,7 +782,7 @@ class MainWindow(QMainWindow):
         self.statusbar.showMessage("就绪")
 
         # 添加版本号到右下角
-        self.version_label = QLabel("v0.1.6")
+        self.version_label = QLabel("v0.1.7")
         self.version_label.setStyleSheet("""
             QLabel {
                 color: #A09080;
@@ -1004,12 +1010,12 @@ class MainWindow(QMainWindow):
             self.sidebar_container.hide()
             self.toggle_sidebar_btn.setText("▶")
             self.toggle_sidebar_btn.setToolTip("展开侧边栏")
-            self.left_expand_btn.show()
-            self._update_floating_buttons()
+            self._left_btn_should_show = True
         else:
             self.sidebar_container.show()
             self.toggle_sidebar_btn.setText("◀")
             self.toggle_sidebar_btn.setToolTip("收起侧边栏")
+            self._left_btn_should_show = False
             self.left_expand_btn.hide()
 
     @Slot()
@@ -1019,12 +1025,12 @@ class MainWindow(QMainWindow):
             self.chat_container.hide()
             self.toggle_chat_btn.setText("◀")
             self.toggle_chat_btn.setToolTip("展开 AI 对话")
-            self.right_expand_btn.show()
-            self._update_floating_buttons()
+            self._right_btn_should_show = True
         else:
             self.chat_container.show()
             self.toggle_chat_btn.setText("▶")
             self.toggle_chat_btn.setToolTip("收起 AI 对话")
+            self._right_btn_should_show = False
             self.right_expand_btn.hide()
 
     def _update_floating_buttons(self) -> None:
@@ -1044,6 +1050,34 @@ class MainWindow(QMainWindow):
         """窗口大小改变事件"""
         super().resizeEvent(event)
         self._update_floating_buttons()
+
+    def mouseMoveEvent(self, event: Any) -> None:
+        """鼠标移动事件 - 检测边缘显示展开按钮"""
+        super().mouseMoveEvent(event)
+        pos = event.pos()
+        edge_threshold = 30  # 边缘检测阈值
+
+        # 左侧边缘检测
+        if self._left_btn_should_show:
+            if pos.x() <= edge_threshold:
+                self.left_expand_btn.show()
+                self._update_floating_buttons()
+            else:
+                self.left_expand_btn.hide()
+
+        # 右侧边缘检测
+        if self._right_btn_should_show:
+            if pos.x() >= self.width() - edge_threshold:
+                self.right_expand_btn.show()
+                self._update_floating_buttons()
+            else:
+                self.right_expand_btn.hide()
+
+    def leaveEvent(self, event: Any) -> None:
+        """鼠标离开窗口事件"""
+        super().leaveEvent(event)
+        self.left_expand_btn.hide()
+        self.right_expand_btn.hide()
 
     @Slot(str)
     def _on_folder_skill_updated(self, folder_name: str) -> None:
