@@ -3,7 +3,6 @@
 使用 QWebEngine 加载 EasyMDE 编辑器。
 """
 
-from pathlib import Path
 from typing import Any
 
 from PySide6.QtCore import QUrl, Signal, Slot, QObject

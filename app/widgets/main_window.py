@@ -10,7 +10,6 @@ from PySide6.QtCore import QSettings, Qt, Slot, QThread, Signal
 from PySide6.QtGui import QAction, QIcon, QKeySequence, QPixmap
 from PySide6.QtWidgets import (
     QApplication,
-    QHBoxLayout,
     QLabel,
     QMainWindow,
     QMessageBox,
@@ -843,7 +842,7 @@ class MainWindow(QMainWindow):
         self.statusbar.showMessage("就绪")
 
         # 添加版本号到右下角
-        self.version_label = QLabel("v0.2.2")
+        self.version_label = QLabel("v0.2.3")
         self.version_label.setStyleSheet("""
             QLabel {
                 color: #A09080;
