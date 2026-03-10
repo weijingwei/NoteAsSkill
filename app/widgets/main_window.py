@@ -690,7 +690,7 @@ class MainWindow(QMainWindow):
         self.statusbar.showMessage("就绪")
 
         # 添加版本号到右下角
-        self.version_label = QLabel("v0.1.4")
+        self.version_label = QLabel("v0.1.5")
         self.version_label.setStyleSheet("""
             QLabel {
                 color: #A09080;

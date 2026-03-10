@@ -42,9 +42,8 @@ class NotificationBar(QWidget):
         layout.addWidget(self.message_label, 1)
 
         # 关闭按钮
-        self.close_button = QPushButton("×")
-        self.close_button.setFixedSize(24, 24)
-        self.close_button.setFlat(True)
+        self.close_button = QPushButton("关闭")
+        self.close_button.setMinimumWidth(50)
         self.close_button.clicked.connect(self.hide)
         layout.addWidget(self.close_button)
 
@@ -91,13 +90,14 @@ class NotificationBar(QWidget):
             }}
             QPushButton {{
                 color: {text_color};
-                font-size: 18px;
-                font-weight: bold;
-                border: none;
+                background-color: transparent;
+                border: 1px solid {text_color};
+                border-radius: 6px;
+                padding: 4px 12px;
+                font-size: 12px;
             }}
             QPushButton:hover {{
                 background-color: rgba(0, 0, 0, 0.1);
-                border-radius: 12px;
             }}
         """)
 
