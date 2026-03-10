@@ -163,6 +163,14 @@ class MainWindow(QMainWindow):
         delete_action.triggered.connect(self._on_delete_note)
         self.sidebar_toolbar.addAction(delete_action)
 
+        self.sidebar_toolbar.addSeparator()
+
+        # 同步按钮
+        sync_action = QAction("同步", self)
+        sync_action.setToolTip("同步笔记到 Git 仓库")
+        sync_action.triggered.connect(self._on_git_sync)
+        self.sidebar_toolbar.addAction(sync_action)
+
         # 侧边栏
         self.sidebar = Sidebar()
         sidebar_layout.addWidget(self.sidebar)
@@ -820,6 +828,35 @@ class MainWindow(QMainWindow):
         """打开设置对话框"""
         dialog = SettingsDialog(self)
         dialog.exec()
+
+    @Slot()
+    def _on_git_sync(self) -> None:
+        """同步笔记到 Git 仓库"""
+        config = get_config()
+
+        if not config.git_enabled:
+            self.notification_bar.show_error("Git 同步未启用，请在设置中配置")
+            return
+
+        if not config.git_remote_url:
+            self.notification_bar.show_error("未配置 Git 远程仓库地址")
+            return
+
+        from ..core.git_sync import get_git_sync_manager
+
+        sync_manager = get_git_sync_manager()
+
+        if sync_manager.is_syncing():
+            self.notification_bar.show_progress("正在同步中...")
+            return
+
+        self.notification_bar.show_progress("正在同步笔记...")
+
+        sync_manager.sync(
+            on_progress=lambda msg: self.notification_bar.show_progress(msg),
+            on_success=lambda msg: self.notification_bar.show_success(msg),
+            on_error=lambda msg: self.notification_bar.show_error(msg),
+        )
 
     @Slot()
     def _on_about(self) -> None:

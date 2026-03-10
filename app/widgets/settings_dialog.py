@@ -1,6 +1,6 @@
 """设置对话框模块
 
-提供 AI 配置和界面偏好设置界面。
+提供 AI 配置、界面偏好设置和 Git 同步配置界面。
 """
 
 from PySide6.QtCore import Slot
@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
     QTabWidget,
     QVBoxLayout,
     QWidget,
+    QLabel,
 )
 
 from ..core.config import get_config
@@ -30,7 +31,7 @@ class SettingsDialog(QDialog):
         super().__init__(parent)
 
         self.setWindowTitle("设置")
-        self.setMinimumSize(500, 400)
+        self.setMinimumSize(500, 450)
 
         self._init_ui()
         self._load_settings()
@@ -50,6 +51,10 @@ class SettingsDialog(QDialog):
         # 编辑器设置标签页
         editor_tab = self._create_editor_tab()
         self.tab_widget.addTab(editor_tab, "编辑器")
+
+        # Git 同步标签页
+        git_tab = self._create_git_tab()
+        self.tab_widget.addTab(git_tab, "Git 同步")
 
         # 按钮
         button_layout = QVBoxLayout()
@@ -150,6 +155,56 @@ class SettingsDialog(QDialog):
 
         return widget
 
+    def _create_git_tab(self) -> QWidget:
+        """创建 Git 同步标签页"""
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+
+        # 启用设置
+        enable_group = QGroupBox("Git 同步")
+        enable_layout = QVBoxLayout(enable_group)
+
+        self.git_enabled_checkbox = QCheckBox("启用 Git 同步")
+        enable_layout.addWidget(self.git_enabled_checkbox)
+
+        layout.addWidget(enable_group)
+
+        # 远程仓库配置
+        remote_group = QGroupBox("远程仓库")
+        remote_layout = QFormLayout(remote_group)
+
+        self.git_url_input = QLineEdit()
+        self.git_url_input.setPlaceholderText("git@github.com:user/repo.git 或 https://github.com/user/repo.git")
+        remote_layout.addRow("仓库地址:", self.git_url_input)
+
+        self.git_branch_input = QLineEdit()
+        self.git_branch_input.setPlaceholderText("main")
+        remote_layout.addRow("分支:", self.git_branch_input)
+
+        layout.addWidget(remote_group)
+
+        # 同步设置
+        sync_group = QGroupBox("同步设置")
+        sync_layout = QFormLayout(sync_group)
+
+        self.git_auto_sync_checkbox = QCheckBox("自动同步")
+        sync_layout.addRow(self.git_auto_sync_checkbox)
+
+        self.git_commit_msg_input = QLineEdit()
+        self.git_commit_msg_input.setPlaceholderText("更新笔记")
+        sync_layout.addRow("提交信息:", self.git_commit_msg_input)
+
+        layout.addWidget(sync_group)
+
+        # 提示
+        hint_label = QLabel("提示: 笔记内容将同步到指定的 Git 仓库，而非项目本身。")
+        hint_label.setStyleSheet("color: #8B7B6B; font-style: italic;")
+        layout.addWidget(hint_label)
+
+        layout.addStretch()
+
+        return widget
+
     def _load_settings(self) -> None:
         """加载设置"""
         config = get_config()
@@ -166,6 +221,13 @@ class SettingsDialog(QDialog):
         self.font_size_spin.setValue(config.editor_font_size)
         self.autosave_interval_spin.setValue(config.auto_save_interval)
         self.auto_generate_skill_checkbox.setChecked(config.auto_generate_skill)
+
+        # Git 设置
+        self.git_enabled_checkbox.setChecked(config.git_enabled)
+        self.git_url_input.setText(config.git_remote_url)
+        self.git_branch_input.setText(config.git_branch)
+        self.git_auto_sync_checkbox.setChecked(config.git_auto_sync)
+        self.git_commit_msg_input.setText(config.git_commit_message)
 
     def _on_provider_changed(self, provider: str) -> None:
         """提供商改变"""
@@ -204,6 +266,13 @@ class SettingsDialog(QDialog):
         config.editor_font_size = self.font_size_spin.value()
         config.auto_save_interval = self.autosave_interval_spin.value()
         config.auto_generate_skill = self.auto_generate_skill_checkbox.isChecked()
+
+        # Git 设置
+        config.git_enabled = self.git_enabled_checkbox.isChecked()
+        config.git_remote_url = self.git_url_input.text()
+        config.git_branch = self.git_branch_input.text() or "main"
+        config.git_auto_sync = self.git_auto_sync_checkbox.isChecked()
+        config.git_commit_message = self.git_commit_msg_input.text() or "更新笔记"
 
         # 保存到文件
         config.save()

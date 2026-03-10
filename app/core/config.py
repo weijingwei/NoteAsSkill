@@ -46,6 +46,13 @@ class Config:
             "update_delay": 30,                 # 延迟更新时间（秒）
             "generation_mode": "hybrid",        # simple | ai | hybrid
         },
+        "git": {
+            "enabled": False,                   # 是否启用 git 同步
+            "remote_url": "",                   # git 远程仓库地址（HTTPS 或 SSH）
+            "branch": "main",                   # 分支名称
+            "auto_sync": False,                 # 是否自动同步
+            "commit_message": "更新笔记",        # 默认提交信息
+        },
     }
 
     def __init__(self, config_path: Path | None = None):
@@ -245,6 +252,53 @@ class Config:
     @folder_skill_generation_mode.setter
     def folder_skill_generation_mode(self, value: str) -> None:
         self.set("folder_skill.generation_mode", value)
+
+    # ==================== Git 同步配置 ====================
+
+    @property
+    def git_enabled(self) -> bool:
+        """是否启用 git 同步"""
+        return self.get("git.enabled", False)
+
+    @git_enabled.setter
+    def git_enabled(self, value: bool) -> None:
+        self.set("git.enabled", value)
+
+    @property
+    def git_remote_url(self) -> str:
+        """git 远程仓库地址"""
+        return self.get("git.remote_url", "")
+
+    @git_remote_url.setter
+    def git_remote_url(self, value: str) -> None:
+        self.set("git.remote_url", value)
+
+    @property
+    def git_branch(self) -> str:
+        """git 分支名称"""
+        return self.get("git.branch", "main")
+
+    @git_branch.setter
+    def git_branch(self, value: str) -> None:
+        self.set("git.branch", value)
+
+    @property
+    def git_auto_sync(self) -> bool:
+        """是否自动同步"""
+        return self.get("git.auto_sync", False)
+
+    @git_auto_sync.setter
+    def git_auto_sync(self, value: bool) -> None:
+        self.set("git.auto_sync", value)
+
+    @property
+    def git_commit_message(self) -> str:
+        """默认提交信息"""
+        return self.get("git.commit_message", "更新笔记")
+
+    @git_commit_message.setter
+    def git_commit_message(self, value: str) -> None:
+        self.set("git.commit_message", value)
 
 
 # 全局配置实例
