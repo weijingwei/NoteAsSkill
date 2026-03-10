@@ -5,6 +5,8 @@
 2. 文件夹的创建和管理
 3. SKILL.md 文件生成
 4. AI 对话功能（模拟测试）
+5. 编辑历史功能（撤销/重做）
+6. UI 组件测试
 """
 
 import sys
@@ -48,7 +50,6 @@ def test_note_manager():
     print("\n=== 测试笔记管理器 ===")
     result = TestResult()
 
-    # 创建临时测试目录
     temp_dir = tempfile.mkdtemp()
     notebook_path = Path(temp_dir) / "notebook"
 
@@ -145,7 +146,7 @@ def test_skill_generation():
     try:
         from app.core.skill_generator import SkillGenerator
 
-        generator = SkillGenerator()  # 不需要参数
+        generator = SkillGenerator()
 
         # TC01: 生成 SKILL.md 内容
         test_content = "# 测试技能\n\n这是一个测试技能的描述。\n\n## 使用方法\n\n```python\ndef test():\n    pass\n```"
@@ -162,58 +163,88 @@ def test_skill_generation():
     return result
 
 
-def test_existing_data():
-    """测试现有数据"""
-    print("\n=== 测试现有数据 ===")
+def test_ui_components():
+    """测试 UI 组件"""
+    print("\n=== 测试 UI 组件 ===")
     result = TestResult()
 
-    notebook_path = Path(__file__).parent.parent / "notebook"
+    try:
+        # TC01: 侧边栏组件
+        from app.widgets.sidebar import Sidebar, DropableTreeWidget, DraggableListWidget
+        result.add("Sidebar 组件", Sidebar is not None, "Sidebar defined")
+        result.add("DropableTreeWidget 组件", DropableTreeWidget is not None, "DropableTreeWidget defined")
+        result.add("DraggableListWidget 组件", DraggableListWidget is not None, "DraggableListWidget defined")
 
-    if not notebook_path.exists():
-        print("  跳过: notebook 目录不存在")
-        return result
+        # TC02: 对话面板组件
+        from app.widgets.chat_panel import ChatPanel, StreamChatWorker
+        result.add("ChatPanel 组件", ChatPanel is not None, "ChatPanel defined")
+        result.add("StreamChatWorker 组件", StreamChatWorker is not None, "StreamChatWorker defined")
 
-    from app.core.note_manager import NoteManager
-    manager = NoteManager(notebook_path)
+        # TC03: 通知栏组件
+        from app.widgets.notification_bar import NotificationBar
+        result.add("NotificationBar 组件", NotificationBar is not None, "NotificationBar defined")
 
-    # TC01: 加载现有笔记
-    notes = manager.list_notes()
-    result.add("加载现有笔记", len(notes) > 0, f"count={len(notes)}")
+        # TC04: 编辑器组件
+        from app.widgets.editor import Editor, EditorBridge
+        result.add("Editor 组件", Editor is not None, "Editor defined")
+        result.add("EditorBridge 组件", EditorBridge is not None, "EditorBridge defined")
 
-    # TC02: 加载现有文件夹
-    folders = manager.list_folders()
-    result.add("加载现有文件夹", len(folders) > 0, f"count={len(folders)}")
+        # TC05: 设置对话框
+        from app.widgets.settings_dialog import SettingsDialog
+        result.add("SettingsDialog 组件", SettingsDialog is not None, "SettingsDialog defined")
 
-    # TC03: 验证 SKILL.md 文件
-    skills_path = notebook_path / "skills"
-    if skills_path.exists():
-        skill_files = []
-        for note_dir in skills_path.iterdir():
-            if note_dir.is_dir():
-                skill_file = note_dir / "SKILL.md"
-                if skill_file.exists():
-                    skill_files.append(skill_file)
-        result.add("笔记 SKILL.md 文件", len(skill_files) > 0, f"count={len(skill_files)}")
+    except Exception as e:
+        result.add("UI 组件测试", False, f"error: {str(e)}")
 
-        # 检查内容
-        for skill_file in skill_files[:3]:  # 只检查前3个
-            with open(skill_file, "r", encoding="utf-8") as f:
+    return result
+
+
+def test_editor_history():
+    """测试编辑器历史功能（撤销/重做）"""
+    print("\n=== 测试编辑器历史功能 ===")
+    result = TestResult()
+
+    try:
+        from app.widgets.editor import Editor
+
+        # TC01: 检查类常量
+        result.add("最大历史记录数", Editor.MAX_HISTORY == 20, f"MAX_HISTORY={Editor.MAX_HISTORY}")
+
+        # TC02: 检查方法存在
+        result.add("can_go_back 方法", hasattr(Editor, 'can_go_back'), "can_go_back defined")
+        result.add("can_go_forward 方法", hasattr(Editor, 'can_go_forward'), "can_go_forward defined")
+        result.add("go_back 方法", hasattr(Editor, 'go_back'), "go_back defined")
+        result.add("go_forward 方法", hasattr(Editor, 'go_forward'), "go_forward defined")
+        result.add("save_current_to_history 方法", hasattr(Editor, 'save_current_to_history'), "save_current_to_history defined")
+
+    except Exception as e:
+        result.add("编辑器历史测试", False, f"error: {str(e)}")
+
+    return result
+
+
+def test_app_icon():
+    """测试应用图标"""
+    print("\n=== 测试应用图标 ===")
+    result = TestResult()
+
+    try:
+        # TC01: SVG 图标文件存在
+        icon_path = project_root / "assets" / "icon.svg"
+        result.add("SVG 图标文件存在", icon_path.exists(), f"path={icon_path}")
+
+        # TC02: SVG 文件内容有效
+        if icon_path.exists():
+            with open(icon_path, "r", encoding="utf-8") as f:
                 content = f.read()
-            has_valid_content = "---" in content and len(content) > 50
-            result.add(f"SKILL.md 有效 ({skill_file.parent.name})", has_valid_content, f"length={len(content)}")
+            result.add("SVG 文件有效", "<svg" in content and "</svg>" in content, f"length={len(content)}")
 
-    # TC04: 验证文件夹 SKILL.md
-    folder_skills_path = notebook_path / ".folder_skills"
-    if folder_skills_path.exists():
-        folder_skills = list(folder_skills_path.glob("*.md"))
-        result.add("文件夹 SKILL.md 文件", len(folder_skills) > 0, f"count={len(folder_skills)}")
+        # TC03: 图标生成脚本存在
+        script_path = project_root / "scripts" / "create_icons.py"
+        result.add("图标生成脚本存在", script_path.exists(), f"path={script_path}")
 
-        # TC05: 检查文件夹 SKILL 内容
-        for fs_file in folder_skills:
-            with open(fs_file, "r", encoding="utf-8") as f:
-                content = f.read()
-            has_valid_content = "---" in content and "description:" in content
-            result.add(f"文件夹 SKILL 内容有效 ({fs_file.name})", has_valid_content, f"valid={has_valid_content}")
+    except Exception as e:
+        result.add("应用图标测试", False, f"error: {str(e)}")
 
     return result
 
@@ -272,6 +303,61 @@ def test_config_management():
     return result
 
 
+def test_existing_data():
+    """测试现有数据"""
+    print("\n=== 测试现有数据 ===")
+    result = TestResult()
+
+    notebook_path = project_root / "notebook"
+
+    if not notebook_path.exists():
+        print("  跳过: notebook 目录不存在")
+        return result
+
+    from app.core.note_manager import NoteManager
+    manager = NoteManager(notebook_path)
+
+    # TC01: 加载现有笔记
+    notes = manager.list_notes()
+    result.add("加载现有笔记", len(notes) > 0, f"count={len(notes)}")
+
+    # TC02: 加载现有文件夹
+    folders = manager.list_folders()
+    result.add("加载现有文件夹", len(folders) > 0, f"count={len(folders)}")
+
+    # TC03: 验证 SKILL.md 文件
+    skills_path = notebook_path / "skills"
+    if skills_path.exists():
+        skill_files = []
+        for note_dir in skills_path.iterdir():
+            if note_dir.is_dir():
+                skill_file = note_dir / "SKILL.md"
+                if skill_file.exists():
+                    skill_files.append(skill_file)
+        result.add("笔记 SKILL.md 文件", len(skill_files) > 0, f"count={len(skill_files)}")
+
+        # 检查内容
+        for skill_file in skill_files[:3]:  # 只检查前3个
+            with open(skill_file, "r", encoding="utf-8") as f:
+                content = f.read()
+            has_valid_content = "---" in content and len(content) > 50
+            result.add(f"SKILL.md 有效 ({skill_file.parent.name})", has_valid_content, f"length={len(content)}")
+
+    # TC04: 验证文件夹 SKILL.md
+    folder_skills_path = notebook_path / ".folder_skills"
+    if folder_skills_path.exists():
+        folder_skills = list(folder_skills_path.glob("*.md"))
+        result.add("文件夹 SKILL.md 文件", len(folder_skills) > 0, f"count={len(folder_skills)}")
+
+        for fs_file in folder_skills:
+            with open(fs_file, "r", encoding="utf-8") as f:
+                content = f.read()
+            has_valid_content = "---" in content and "description:" in content
+            result.add(f"文件夹 SKILL 内容有效 ({fs_file.name})", has_valid_content, f"valid={has_valid_content}")
+
+    return result
+
+
 def main():
     """运行所有测试"""
     print("=" * 50)
@@ -283,9 +369,12 @@ def main():
     all_results.append(test_note_manager())
     all_results.append(test_folder_manager())
     all_results.append(test_skill_generation())
-    all_results.append(test_existing_data())
+    all_results.append(test_editor_history())
+    all_results.append(test_ui_components())
+    all_results.append(test_app_icon())
     all_results.append(test_chat_panel_modes())
     all_results.append(test_config_management())
+    all_results.append(test_existing_data())
 
     # 总汇总
     total_passed = sum(r.passed for r in all_results)

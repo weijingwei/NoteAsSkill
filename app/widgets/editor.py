@@ -111,7 +111,8 @@ class Editor(QWidget):
 
     content_changed = Signal()
     save_requested = Signal()
-    note_navigated = Signal(str)  # 导航到其他笔记 (note_id)
+
+    MAX_HISTORY = 20  # 最大历史记录数
 
     def __init__(self):
         super().__init__()
@@ -120,11 +121,10 @@ class Editor(QWidget):
         self._channel = QWebChannel()
         self._channel.registerObject("bridge", self._bridge)
 
-        # 历史记录 - 存储(note_id, title)元组
-        self._history: list[tuple[str, str]] = []
-        self._history_index: int = -1
+        # 编辑历史 - 每个笔记独立的历史记录
+        # 结构: {note_id: {"history": [content1, content2, ...], "index": int}}
+        self._note_histories: dict[str, dict] = {}
         self._current_note_id: str = ""
-        self._is_loaded = False  # 编辑器是否加载完成
 
         self._init_ui()
         self._connect_signals()
@@ -175,50 +175,96 @@ class Editor(QWidget):
         if title:
             self.setWindowTitle(title)
 
-        # 添加到历史记录（如果note_id不为空且与当前不同）
+        # 切换笔记时初始化历史记录
         if note_id and note_id != self._current_note_id:
-            self._add_to_history(note_id, title)
+            self._current_note_id = note_id
+            # 为新笔记创建历史记录
+            if note_id not in self._note_histories:
+                self._note_histories[note_id] = {
+                    "history": [content],
+                    "index": 0
+                }
 
-    def _add_to_history(self, note_id: str, title: str) -> None:
-        """添加到历史记录"""
+    def _add_to_history(self, content: str) -> None:
+        """添加内容到当前笔记的历史记录"""
+        if not self._current_note_id:
+            return
+
+        note_history = self._note_histories.get(self._current_note_id)
+        if not note_history:
+            return
+
+        history = note_history["history"]
+        index = note_history["index"]
+
         # 如果当前不在历史末尾，截断后面的记录
-        if self._history_index < len(self._history) - 1:
-            self._history = self._history[:self._history_index + 1]
+        if index < len(history) - 1:
+            history = history[:index + 1]
+            note_history["history"] = history
 
-        # 如果与当前记录相同，不重复添加
-        if self._history and self._history[self._history_index] == (note_id, title):
+        # 如果内容与最后一个记录相同，不添加
+        if history and history[-1] == content:
             return
 
         # 添加新记录
-        self._history.append((note_id, title))
-        self._history_index = len(self._history) - 1
-        self._current_note_id = note_id
+        history.append(content)
+
+        # 限制历史记录数量
+        if len(history) > self.MAX_HISTORY:
+            history.pop(0)
+            note_history["index"] = len(history) - 1
+        else:
+            note_history["index"] = len(history) - 1
+
+    def save_current_to_history(self) -> None:
+        """保存当前内容到历史记录（由外部调用）"""
+        if not self._current_note_id:
+            return
+
+        # 获取当前内容
+        def callback(content: str) -> None:
+            if content:
+                self._add_to_history(content)
+
+        self.web_view.page().runJavaScript("editor ? editor.value() : '';", callback)
 
     def can_go_back(self) -> bool:
         """是否可以后退"""
-        return self._history_index > 0
+        if not self._current_note_id:
+            return False
+        note_history = self._note_histories.get(self._current_note_id)
+        if not note_history:
+            return False
+        return note_history["index"] > 0
 
     def can_go_forward(self) -> bool:
         """是否可以前进"""
-        return self._history_index < len(self._history) - 1
+        if not self._current_note_id:
+            return False
+        note_history = self._note_histories.get(self._current_note_id)
+        if not note_history:
+            return False
+        return note_history["index"] < len(note_history["history"]) - 1
 
     def go_back(self) -> str | None:
-        """后退，返回note_id"""
-        if self.can_go_back():
-            self._history_index -= 1
-            note_id, title = self._history[self._history_index]
-            self._current_note_id = note_id
-            return note_id
-        return None
+        """后退，返回内容"""
+        if not self.can_go_back():
+            return None
+
+        note_history = self._note_histories[self._current_note_id]
+        note_history["index"] -= 1
+        content = note_history["history"][note_history["index"]]
+        return content
 
     def go_forward(self) -> str | None:
-        """前进，返回note_id"""
-        if self.can_go_forward():
-            self._history_index += 1
-            note_id, title = self._history[self._history_index]
-            self._current_note_id = note_id
-            return note_id
-        return None
+        """前进，返回内容"""
+        if not self.can_go_forward():
+            return None
+
+        note_history = self._note_histories[self._current_note_id]
+        note_history["index"] += 1
+        content = note_history["history"][note_history["index"]]
+        return content
 
     def get_content(self) -> str:
         """获取编辑器内容"""

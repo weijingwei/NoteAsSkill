@@ -843,7 +843,7 @@ class MainWindow(QMainWindow):
         self.statusbar.showMessage("就绪")
 
         # 添加版本号到右下角
-        self.version_label = QLabel("v0.2.1")
+        self.version_label = QLabel("v0.2.2")
         self.version_label.setStyleSheet("""
             QLabel {
                 color: #A09080;
@@ -880,6 +880,11 @@ class MainWindow(QMainWindow):
             return
 
         content = self.editor.get_content()
+
+        # 保存当前内容到编辑历史
+        self.editor.save_current_to_history()
+        self._update_nav_buttons()
+
         note_manager = get_note_manager()
         note_manager.update_note(self._current_note.id, content=content)
 
@@ -1069,37 +1074,31 @@ class MainWindow(QMainWindow):
 
     @Slot()
     def _on_back(self) -> None:
-        """后退"""
-        note_id = self.editor.go_back()
-        if note_id:
-            # 选中对应的笔记
-            note_manager = get_note_manager()
-            note = note_manager.get_note(note_id)
-            if note:
-                self._current_note = note
-                content = note_manager.get_note_content(note.id)
-                # 不添加到历史，只设置内容
-                self.editor.set_content(content, note.title)
-                self.chat_panel.set_current_note(note.title, content)
-                self._update_nav_buttons()
-                self.statusbar.showMessage(f"已打开: {note.title}")
+        """后退 - 撤销编辑"""
+        content = self.editor.go_back()
+        if content is not None:
+            # 设置编辑器内容（不添加到历史）
+            js = f"""
+            if (typeof editor !== 'undefined' && editor) {{
+                editor.value({repr(content)});
+            }}
+            """
+            self.editor.web_view.page().runJavaScript(js)
+            self._update_nav_buttons()
 
     @Slot()
     def _on_forward(self) -> None:
-        """前进"""
-        note_id = self.editor.go_forward()
-        if note_id:
-            # 选中对应的笔记
-            note_manager = get_note_manager()
-            note = note_manager.get_note(note_id)
-            if note:
-                self._current_note = note
-                content = note_manager.get_note_content(note.id)
-                # 不添加到历史，只设置内容
-                self.editor.set_content(content, note.title)
-                self.chat_panel.set_current_note(note.title, content)
-                self._update_nav_buttons()
-                self.statusbar.showMessage(f"已打开: {note.title}")
+        """前进 - 重做编辑"""
+        content = self.editor.go_forward()
+        if content is not None:
+            # 设置编辑器内容（不添加到历史）
+            js = f"""
+            if (typeof editor !== 'undefined' && editor) {{
+                editor.value({repr(content)});
+            }}
+            """
+            self.editor.web_view.page().runJavaScript(js)
+            self._update_nav_buttons()
 
     def _update_nav_buttons(self) -> None:
         """更新导航按钮状态"""
