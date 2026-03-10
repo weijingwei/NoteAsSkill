@@ -124,6 +124,7 @@ class Editor(QWidget):
         self._history: list[tuple[str, str]] = []
         self._history_index: int = -1
         self._current_note_id: str = ""
+        self._is_loaded = False  # 编辑器是否加载完成
 
         self._init_ui()
         self._connect_signals()
@@ -163,14 +164,19 @@ class Editor(QWidget):
 
     def set_content(self, content: str, title: str = "", note_id: str = "") -> None:
         """设置编辑器内容"""
-        js = f"setContent({repr(content)});"
+        # 使用JavaScript安全地设置内容，检查editor是否存在
+        js = f"""
+        if (typeof editor !== 'undefined' && editor) {{
+            editor.value({repr(content)});
+        }}
+        """
         self.web_view.page().runJavaScript(js)
 
         if title:
             self.setWindowTitle(title)
 
-        # 添加到历史记录
-        if note_id:
+        # 添加到历史记录（如果note_id不为空且与当前不同）
+        if note_id and note_id != self._current_note_id:
             self._add_to_history(note_id, title)
 
     def _add_to_history(self, note_id: str, title: str) -> None:

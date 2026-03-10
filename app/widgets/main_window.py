@@ -496,8 +496,6 @@ class MainWindow(QMainWindow):
                 background-color: #FDF6ED;
                 color: #8B5A2B;
             }
-                color: #8B5A2B;
-            }
 
             /* 标签 - 温暖的文字 */
             QLabel {
@@ -795,7 +793,7 @@ class MainWindow(QMainWindow):
         self.statusbar.showMessage("就绪")
 
         # 添加版本号到右下角
-        self.version_label = QLabel("v0.1.9")
+        self.version_label = QLabel("v0.2.0")
         self.version_label.setStyleSheet("""
             QLabel {
                 color: #A09080;
@@ -1031,9 +1029,7 @@ class MainWindow(QMainWindow):
                 self._current_note = note
                 content = note_manager.get_note_content(note.id)
                 # 不添加到历史，只设置内容
-                js = f"setContent({repr(content)});"
-                self.editor.web_view.page().runJavaScript(js)
-                self.editor.setWindowTitle(note.title)
+                self.editor.set_content(content, note.title)
                 self.chat_panel.set_current_note(note.title, content)
                 self._update_nav_buttons()
                 self.statusbar.showMessage(f"已打开: {note.title}")
@@ -1050,9 +1046,7 @@ class MainWindow(QMainWindow):
                 self._current_note = note
                 content = note_manager.get_note_content(note.id)
                 # 不添加到历史，只设置内容
-                js = f"setContent({repr(content)});"
-                self.editor.web_view.page().runJavaScript(js)
-                self.editor.setWindowTitle(note.title)
+                self.editor.set_content(content, note.title)
                 self.chat_panel.set_current_note(note.title, content)
                 self._update_nav_buttons()
                 self.statusbar.showMessage(f"已打开: {note.title}")
