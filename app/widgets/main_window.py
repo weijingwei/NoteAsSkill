@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from PySide6.QtCore import QSettings, Qt, Slot, QThread, Signal
-from PySide6.QtGui import QAction, QKeySequence
+from PySide6.QtGui import QAction, QIcon, QKeySequence, QPixmap
 from PySide6.QtWidgets import (
     QApplication,
     QHBoxLayout,
@@ -93,6 +93,7 @@ class MainWindow(QMainWindow):
 
         # 初始化组件
         self._init_ui()
+        self._set_window_icon()
         self._init_menu()
         self._init_statusbar()
         self._connect_signals()
@@ -118,6 +119,55 @@ class MainWindow(QMainWindow):
         state = self.settings.value("windowState")
         if state:
             self.restoreState(state)
+
+    def _set_window_icon(self) -> None:
+        """设置窗口图标"""
+        # 尝试加载SVG图标
+        icon_path = Path(__file__).parent.parent.parent / "assets" / "icon.svg"
+
+        if icon_path.exists():
+            self.setWindowIcon(QIcon(str(icon_path)))
+        else:
+            # 创建一个简单的默认图标
+            pixmap = QPixmap(64, 64)
+            pixmap.fill(Qt.GlobalColor.transparent)
+            from PySide6.QtGui import QPainter, QColor, QFont
+            painter = QPainter(pixmap)
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+            # 绘制背景圆
+            painter.setBrush(QColor("#F5EDE4"))
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.drawEllipse(2, 2, 60, 60)
+
+            # 绘制笔记本
+            painter.setBrush(QColor("#FFFEF9"))
+            painter.setPen(QColor("#E8DFD5"))
+            painter.drawRoundedRect(12, 14, 28, 36, 2, 2)
+            painter.drawRoundedRect(24, 14, 28, 36, 2, 2)
+
+            # 绘制书脊
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(QColor("#D4A574"))
+            painter.drawRect(22, 14, 4, 36)
+
+            # 绘制星芒
+            painter.setBrush(QColor("#F5C778"))
+            painter.setPen(QColor("#D4A574"))
+            painter.drawEllipse(46, 20, 8, 8)
+
+            # 绘制光芒
+            pen = painter.pen()
+            pen.setWidth(2)
+            pen.setColor(QColor("#D4A574"))
+            painter.setPen(pen)
+            painter.drawLine(50, 14, 50, 10)
+            painter.drawLine(50, 34, 50, 38)
+            painter.drawLine(42, 24, 38, 24)
+            painter.drawLine(58, 24, 62, 24)
+
+            painter.end()
+            self.setWindowIcon(QIcon(pixmap))
 
     def _init_ui(self) -> None:
         """初始化界面"""
@@ -793,7 +843,7 @@ class MainWindow(QMainWindow):
         self.statusbar.showMessage("就绪")
 
         # 添加版本号到右下角
-        self.version_label = QLabel("v0.2.0")
+        self.version_label = QLabel("v0.2.1")
         self.version_label.setStyleSheet("""
             QLabel {
                 color: #A09080;
