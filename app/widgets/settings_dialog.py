@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
     QFormLayout,
+    QFrame,
     QGroupBox,
     QLineEdit,
     QPushButton,
@@ -19,9 +20,23 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
     QLabel,
+    QListView,
 )
 
 from ..core.config import get_config
+
+
+class NoBorderComboBox(QComboBox):
+    """无边框下拉框 - 解决 Windows 平台下拉列表黑边问题"""
+
+    def showPopup(self) -> None:
+        """显示下拉列表时移除容器边框"""
+        super().showPopup()
+        # 查找下拉框容器并移除边框
+        popup = self.findChild(QFrame)
+        if popup:
+            popup.setLineWidth(0)
+            popup.setFrameShape(QFrame.Shape.NoFrame)
 
 
 class SettingsDialog(QDialog):
@@ -78,7 +93,32 @@ class SettingsDialog(QDialog):
         provider_group = QGroupBox("AI 提供商")
         provider_layout = QVBoxLayout(provider_group)
 
-        self.provider_combo = QComboBox()
+        self.provider_combo = NoBorderComboBox()
+        # 创建 QListView 并直接设置样式（Windows 平台需要）
+        provider_view = QListView()
+        provider_view.setStyleSheet("""
+            QListView {
+                background-color: #FFFEF9;
+                border: 1px solid #E8DFD5;
+                border-radius: 0;
+                padding: 4px;
+                outline: none;
+            }
+            QListView::item {
+                padding: 4px 8px;
+                min-height: 24px;
+                background-color: #FFFEF9;
+                border-radius: 0;
+            }
+            QListView::item:hover {
+                background-color: #FDF8F0;
+            }
+            QListView::item:selected {
+                background-color: #FDF6ED;
+                color: #8B5A2B;
+            }
+        """)
+        self.provider_combo.setView(provider_view)
         self.provider_combo.addItems(["openai", "anthropic", "ollama"])
         self.provider_combo.currentTextChanged.connect(self._on_provider_changed)
         provider_layout.addWidget(self.provider_combo)
@@ -98,7 +138,32 @@ class SettingsDialog(QDialog):
         self.api_key_input.setPlaceholderText("API Key")
         api_layout.addRow("API Key:", self.api_key_input)
 
-        self.model_combo = QComboBox()
+        self.model_combo = NoBorderComboBox()
+        # 创建 QListView 并直接设置样式（Windows 平台需要）
+        model_view = QListView()
+        model_view.setStyleSheet("""
+            QListView {
+                background-color: #FFFEF9;
+                border: 1px solid #E8DFD5;
+                border-radius: 0;
+                padding: 4px;
+                outline: none;
+            }
+            QListView::item {
+                padding: 4px 8px;
+                min-height: 24px;
+                background-color: #FFFEF9;
+                border-radius: 0;
+            }
+            QListView::item:hover {
+                background-color: #FDF8F0;
+            }
+            QListView::item:selected {
+                background-color: #FDF6ED;
+                color: #8B5A2B;
+            }
+        """)
+        self.model_combo.setView(model_view)
         self.model_combo.setEditable(True)
         api_layout.addRow("模型:", self.model_combo)
 

@@ -7,7 +7,7 @@
 
 from typing import Any
 
-from PySide6.QtCore import Qt, Signal, Slot, QMimeData, QRect, QPoint
+from PySide6.QtCore import Qt, Signal, Slot, QMimeData, QPoint, QRect
 from PySide6.QtGui import QAction, QDrag, QPainter, QColor, QFont, QPolygon
 from PySide6.QtWidgets import (
     QHBoxLayout,
@@ -74,11 +74,15 @@ class DropableTreeWidget(QTreeWidget):
     def drawBranches(self, painter: QPainter, rect: QRect, index) -> None:
         """自定义绘制展开/收起按钮，使用三角形指示器"""
         item = self.itemFromIndex(index)
-        if item is None or item.childCount() == 0:
+        if item is None:
             return
 
-        # 先填充背景色，覆盖 Qt 默认的黑底
+        # 【修复】无论是否有子节点，都先填充背景色，覆盖 Qt 默认的黑底
         painter.fillRect(rect, QColor("#FFFEF9"))  # 象牙白背景
+
+        # 无子节点时不绘制三角形，直接返回
+        if item.childCount() == 0:
+            return
 
         # 三角形参数
         size = 8  # 三角形大小
@@ -182,6 +186,7 @@ class Sidebar(QWidget):
 
     def __init__(self):
         super().__init__()
+        self.setObjectName("sidebar")  # 设置对象名称用于样式匹配
 
         self._current_folder = ""  # 当前选中的文件夹路径
         self._current_note_id = ""  # 当前选中的笔记 ID
@@ -210,6 +215,48 @@ class Sidebar(QWidget):
         self.new_folder_btn = QPushButton("+ 新建")
         self.new_folder_btn.setToolTip("新建文件夹")
         self.new_folder_btn.setMinimumWidth(60)
+        # 直接设置按钮样式，确保继承全局样式
+        self.new_folder_btn.setStyleSheet("""
+            QPushButton {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #D4A574, stop:1 #C49564);
+                color: #FFFEF9;
+                border: none;
+                border-radius: 8px;
+                padding: 6px 12px;
+                font-size: 13px;
+                font-weight: 600;
+            }
+            QPushButton:hover {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #C49564, stop:1 #B48554);
+            }
+            QPushButton:pressed {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #B48554, stop:1 #A47544);
+            }
+        """)
+        # 直接设置按钮样式，确保继承全局样式
+        self.new_folder_btn.setStyleSheet("""
+            QPushButton {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #D4A574, stop:1 #C49564);
+                color: #FFFEF9;
+                border: none;
+                border-radius: 8px;
+                padding: 6px 12px;
+                font-size: 13px;
+                font-weight: 600;
+            }
+            QPushButton:hover {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #C49564, stop:1 #B48554);
+            }
+            QPushButton:pressed {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #B48554, stop:1 #A47544);
+            }
+        """)
         folder_header.addWidget(self.new_folder_btn)
         layout.addLayout(folder_header)
 
@@ -277,6 +324,27 @@ class Sidebar(QWidget):
 
         # 新建笔记按钮
         self.new_button = QPushButton("新建笔记")
+        # 直接设置按钮样式，确保继承全局样式
+        self.new_button.setStyleSheet("""
+            QPushButton {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #D4A574, stop:1 #C49564);
+                color: #FFFEF9;
+                border: none;
+                border-radius: 10px;
+                padding: 10px 20px;
+                font-size: 14px;
+                font-weight: 600;
+            }
+            QPushButton:hover {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #C49564, stop:1 #B48554);
+            }
+            QPushButton:pressed {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #B48554, stop:1 #A47544);
+            }
+        """)
         layout.addWidget(self.new_button)
 
     def _connect_signals(self) -> None:
@@ -515,6 +583,12 @@ class Sidebar(QWidget):
 
         menu = QMenu(self)
 
+        rename_action = QAction("重命名", self)
+        rename_action.triggered.connect(lambda: self._rename_note(note_id))
+        menu.addAction(rename_action)
+
+        menu.addSeparator()
+
         delete_action = QAction("删除", self)
         delete_action.triggered.connect(lambda: self._delete_note(note_id))
         menu.addAction(delete_action)
@@ -598,6 +672,35 @@ class Sidebar(QWidget):
             menu.addAction(refresh_action)
 
         menu.exec(self.folder_tree.mapToGlobal(pos))
+
+    def _rename_note(self, note_id: str) -> None:
+        """重命名笔记"""
+        note_manager = get_note_manager()
+        note = note_manager.get_note(note_id)
+
+        if not note:
+            return
+
+        new_title, ok = QInputDialog.getText(
+            self,
+            "重命名笔记",
+            "请输入新标题:",
+            text=note.title,
+        )
+
+        if ok and new_title and new_title != note.title:
+            note_manager.update_note(note_id, title=new_title)
+            self.refresh()
+            # 重新选中该笔记以更新显示
+            for i in range(self.note_list.count()):
+                item = self.note_list.item(i)
+                if item.data(Qt.ItemDataRole.UserRole) == note_id:
+                    self.note_list.setCurrentItem(item)
+                    # 重新加载笔记以更新标题
+                    updated_note = note_manager.get_note(note_id)
+                    if updated_note:
+                        self.note_selected.emit(updated_note)
+                    break
 
     def _delete_note(self, note_id: str) -> None:
         """删除笔记"""

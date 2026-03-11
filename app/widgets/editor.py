@@ -3,22 +3,30 @@
 使用 QWebEngine 加载 EasyMDE 编辑器。
 """
 
+import os
+import logging
 from typing import Any
 
-from PySide6.QtCore import QUrl, Signal, Slot, QObject
+from PySide6.QtCore import QUrl, Signal, Slot, QObject, Qt
 from PySide6.QtWebChannel import QWebChannel
 from PySide6.QtWebEngineWidgets import QWebEngineView
 from PySide6.QtWidgets import QWidget, QVBoxLayout
+from PySide6.QtGui import QWheelEvent
 
-# EasyMDE HTML 模板
-EDITOR_HTML = """
+logger = logging.getLogger(__name__)
+
+# EasyMDE HTML 模板 - 使用本地静态资源
+# 注意：CSS 和 JS 路径会在运行时替换为本地文件路径
+EDITOR_HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Editor</title>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/easymde/dist/easymde.min.css">
+    <!-- Font Awesome - EasyMDE 工具栏图标依赖 -->
+    <link rel="stylesheet" href="{fa_css_path}">
+    <link rel="stylesheet" href="{easymde_css_path}">
     <style>
         body {{
             margin: 0;
@@ -36,11 +44,35 @@ EDITOR_HTML = """
         .editor-preview {{
             font-size: {font_size}px;
         }}
+        /* 确保工具栏可见 - 高度与左右工具栏一致 (36px) */
+        .editor-toolbar {{
+            display: block !important;
+            visibility: visible !important;
+            opacity: 1 !important;
+            background-color: #FBF7F2 !important;
+            border: none !important;
+            border-bottom: 1px solid #E8DFD5 !important;
+            border-radius: 0 !important;
+            padding: 4px 8px !important;
+            height: 36px !important;
+            min-height: 36px !important;
+            box-sizing: border-box !important;
+        }}
+        .editor-toolbar button {{
+            color: #5A4A3A !important;
+        }}
+        .editor-toolbar button:hover {{
+            background-color: #FDF6ED !important;
+        }}
+        .editor-toolbar button.active {{
+            background-color: #FDF6ED !important;
+            color: #8B5A2B !important;
+        }}
     </style>
 </head>
 <body>
     <textarea id="mde-editor"></textarea>
-    <script src="https://cdn.jsdelivr.net/npm/easymde/dist/easymde.min.js"></script>
+    <script src="{easymde_js_path}"></script>
     <script>
         var editor;
         var bridge;
@@ -105,6 +137,66 @@ class EditorBridge(QObject):
         self.content_changed.emit(content)
 
 
+class EditorWebView(QWebEngineView):
+    """自定义 WebEngineView，处理 Ctrl + 滚动缩放"""
+
+    # 字体大小范围限制
+    MIN_FONT_SIZE = 10
+    MAX_FONT_SIZE = 32
+    FONT_SIZE_STEP = 1
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._current_font_size = 14  # 默认字体大小
+        # 确保 zoomFactor 始终为 1.0，禁用页面级别的缩放
+        self.setZoomFactor(1.0)
+
+    def set_font_size(self, size: int) -> None:
+        """设置编辑器字体大小"""
+        self._current_font_size = max(self.MIN_FONT_SIZE, min(self.MAX_FONT_SIZE, size))
+        js = f"""
+        if (typeof editor !== 'undefined' && editor) {{
+            var cm = document.querySelector('.CodeMirror');
+            var preview = document.querySelector('.editor-preview');
+            if (cm) cm.style.fontSize = '{self._current_font_size}px';
+            if (preview) preview.style.fontSize = '{self._current_font_size}px';
+        }}
+        """
+        self.page().runJavaScript(js)
+
+    def get_font_size(self) -> int:
+        """获取当前字体大小"""
+        return self._current_font_size
+
+    def wheelEvent(self, event: QWheelEvent) -> None:
+        """处理滚轮事件，拦截 Ctrl + 滚动"""
+        # 检查是否按下了 Ctrl 键
+        if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
+            # 计算新的字体大小
+            delta = event.angleDelta().y()
+            if delta > 0:
+                # 向上滚动，放大字体
+                new_size = self._current_font_size + self.FONT_SIZE_STEP
+            else:
+                # 向下滚动，缩小字体
+                new_size = self._current_font_size - self.FONT_SIZE_STEP
+
+            # 限制范围
+            if self.MIN_FONT_SIZE <= new_size <= self.MAX_FONT_SIZE:
+                self.set_font_size(new_size)
+
+            # 接受事件，阻止默认的页面缩放行为
+            event.accept()
+            # 强制确保 zoomFactor 始终为 1.0，防止工具栏被缩放
+            # 这是关键：即使 Chromium 内部处理了缩放，我们也立即重置
+            if self.zoomFactor() != 1.0:
+                self.setZoomFactor(1.0)
+            return
+
+        # 非 Ctrl + 滚动，使用默认行为
+        super().wheelEvent(event)
+
+
 class Editor(QWidget):
     """Markdown 编辑器组件"""
 
@@ -133,8 +225,8 @@ class Editor(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
 
-        # WebEngine 视图
-        self.web_view = QWebEngineView()
+        # 使用自定义的 WebEngineView，支持 Ctrl + 滚动调整字体大小
+        self.web_view = EditorWebView()
         self.web_view.page().setWebChannel(self._channel)
 
         layout.addWidget(self.web_view)
@@ -145,12 +237,42 @@ class Editor(QWidget):
     def _load_editor(self) -> None:
         """加载编辑器"""
         from ..core.config import get_config
+        from ..core.static_resources import (
+            ensure_static_files,
+            get_easymde_css_path,
+            get_easymde_js_path,
+            get_fontawesome_css_path,
+            get_static_path
+        )
+
+        # 确保静态资源存在
+        if not ensure_static_files():
+            logger.warning("Failed to ensure static files, editor may not work correctly")
 
         config = get_config()
         font_size = config.editor_font_size
 
-        html = EDITOR_HTML.format(font_size=font_size)
-        self.web_view.setHtml(html, QUrl("about:blank"))
+        # 同步字体大小到自定义 WebView
+        self.web_view._current_font_size = font_size
+
+        # 获取本地文件路径
+        static_path = get_static_path()
+        easymde_css = get_easymde_css_path()
+        easymde_js = get_easymde_js_path()
+        fa_css = get_fontawesome_css_path()
+
+        # 格式化 HTML 模板
+        html = EDITOR_HTML_TEMPLATE.format(
+            font_size=font_size,
+            fa_css_path=QUrl.fromLocalFile(fa_css).toString(),
+            easymde_css_path=QUrl.fromLocalFile(easymde_css).toString(),
+            easymde_js_path=QUrl.fromLocalFile(easymde_js).toString()
+        )
+
+        # 使用本地文件路径作为 baseUrl，确保相对路径正确解析
+        # 注意：baseUrl 需要以 / 结尾才能正确解析相对路径
+        base_url = QUrl.fromLocalFile(static_path + os.sep)
+        self.web_view.setHtml(html, base_url)
 
     def _connect_signals(self) -> None:
         """连接信号"""

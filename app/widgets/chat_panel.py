@@ -9,6 +9,7 @@ from typing import Any
 from PySide6.QtCore import Qt, QThread, Signal, Slot
 from PySide6.QtWidgets import (
     QComboBox,
+    QFrame,
     QHBoxLayout,
     QLabel,
     QListWidget,
@@ -22,6 +23,19 @@ from PySide6.QtWidgets import (
 
 from ..ai.client import create_client
 from ..core.config import get_config
+
+
+class NoBorderComboBox(QComboBox):
+    """无边框下拉框 - 解决 Windows 平台下拉列表黑边问题"""
+
+    def showPopup(self) -> None:
+        """显示下拉列表时移除容器边框"""
+        super().showPopup()
+        # 查找下拉框容器并移除边框
+        popup = self.findChild(QFrame)
+        if popup:
+            popup.setLineWidth(0)
+            popup.setFrameShape(QFrame.Shape.NoFrame)
 
 
 class StreamChatWorker(QThread):
@@ -68,6 +82,7 @@ class ChatPanel(QWidget):
 
     def __init__(self):
         super().__init__()
+        self.setObjectName("chat_panel")  # 设置对象名称用于样式匹配
 
         self._client: Any = None
         self._messages: list[dict[str, str]] = []
@@ -92,16 +107,39 @@ class ChatPanel(QWidget):
         mode_label = QLabel("模式:")
         mode_layout.addWidget(mode_label)
 
-        self.mode_combo = QComboBox()
-        self.mode_combo.setView(QListView())  # 强制使用 Qt 标准渲染
+        self.mode_combo = NoBorderComboBox()
+        # 创建 QListView 并直接设置样式（Windows 平台需要）
+        view = QListView()
+        view.setStyleSheet("""
+            QListView {
+                background-color: #FFFEF9;
+                border: none;
+                padding: 0px;
+                outline: none;
+            }
+            QListView::item {
+                padding: 4px 8px;
+                min-height: 20px;
+                background-color: #FFFEF9;
+            }
+            QListView::item:hover {
+                background-color: #FDF8F0;
+            }
+            QListView::item:selected {
+                background-color: #FDF6ED;
+                color: #8B5A2B;
+            }
+        """)
+        self.mode_combo.setView(view)
         self.mode_combo.addItems([self.MODE_SKILL, self.MODE_QA, self.MODE_CHAT])
-        # 扁平简约风格样式
+        # 扁平简约风格样式（直角紧凑）
+        # 注意：QComboBox QAbstractItemView 的 border 设置为 none 以去除 Windows 上的黑边
         self.mode_combo.setStyleSheet("""
             QComboBox {
                 background-color: #FFFEF9;
                 border: 1px solid #E8DFD5;
-                border-radius: 6px;
-                padding: 4px 8px;
+                border-radius: 0;
+                padding: 2px 6px;
                 color: #4A3F35;
                 min-width: 100px;
             }
@@ -110,19 +148,21 @@ class ChatPanel(QWidget):
             }
             QComboBox::drop-down {
                 border: none;
-                width: 20px;
+                width: 18px;
             }
             QComboBox::down-arrow {
                 image: none;
                 border-left: 4px solid transparent;
                 border-right: 4px solid transparent;
-                border-top: 6px solid #8B5A2B;
-                margin-right: 6px;
+                border-top: 5px solid #8B5A2B;
+                margin-right: 4px;
             }
             QComboBox QAbstractItemView {
                 background-color: #FFFEF9;
-                border: 1px solid #E8DFD5;
-                padding: 4px;
+                border: none;
+                border-radius: 0;
+                padding: 0px;
+                margin: 0px;
                 selection-background-color: #FDF6ED;
                 selection-color: #8B5A2B;
                 outline: none;
@@ -130,8 +170,9 @@ class ChatPanel(QWidget):
             }
             QComboBox QAbstractItemView::item {
                 padding: 4px 8px;
-                min-height: 24px;
+                min-height: 20px;
                 background-color: #FFFEF9;
+                border: none;
             }
             QComboBox QAbstractItemView::item:hover {
                 background-color: #FDF8F0;
@@ -382,3 +423,15 @@ class ChatPanel(QWidget):
     def reload_client(self) -> None:
         """重新加载客户端"""
         self._load_client()
+
+    def cleanup(self) -> None:
+        """清理资源，停止正在运行的工作线程"""
+        if self._worker is not None:
+            # 请求线程停止
+            self._worker.requestInterruption()
+            # 等待线程结束（最多等待 2 秒）
+            if not self._worker.wait(2000):
+                # 如果线程没有响应，强制终止
+                self._worker.terminate()
+                self._worker.wait()
+            self._worker = None

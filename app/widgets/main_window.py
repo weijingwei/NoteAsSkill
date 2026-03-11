@@ -6,14 +6,17 @@
 from pathlib import Path
 from typing import Any
 
-from PySide6.QtCore import QSettings, Qt, Slot, QThread, Signal
-from PySide6.QtGui import QAction, QIcon, QKeySequence, QPixmap
+from PySide6.QtCore import QSettings, Qt, Slot, QThread, Signal, QPoint
+from PySide6.QtGui import QAction, QFont, QIcon, QKeySequence, QPixmap, QPainter, QPolygon, QBrush, QColor
 from PySide6.QtWidgets import (
     QApplication,
+    QGraphicsDropShadowEffect,
     QLabel,
     QMainWindow,
+    QMenu,
     QMessageBox,
     QPushButton,
+    QSizePolicy,
     QSplitter,
     QStatusBar,
     QToolBar,
@@ -29,6 +32,133 @@ from .editor import Editor
 from .sidebar import Sidebar
 from .settings_dialog import SettingsDialog
 from .notification_bar import NotificationBar
+
+
+class ArrowButton(QPushButton):
+    """自定义箭头按钮 - 使用 QPainter 绘制三角形，确保跨平台可靠性"""
+
+    def __init__(self, direction: str = "right", parent=None):
+        """
+        Args:
+            direction: "right" 或 "left"
+        """
+        super().__init__("", parent)
+        self.direction = direction
+        self.setFixedSize(24, 48)
+        self._apply_style()
+
+    def _apply_style(self):
+        """应用样式"""
+        if self.direction == "right":
+            self.setStyleSheet("""
+                QPushButton {
+                    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                        stop:0 #D4A574, stop:1 #C49564);
+                    border: none;
+                    border-radius: 12px;
+                    border-top-left-radius: 0;
+                    border-bottom-left-radius: 0;
+                }
+                QPushButton:hover {
+                    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                        stop:0 #C49564, stop:1 #B48554);
+                }
+            """)
+        else:
+            self.setStyleSheet("""
+                QPushButton {
+                    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                        stop:0 #C49564, stop:1 #D4A574);
+                    border: none;
+                    border-radius: 12px;
+                    border-top-right-radius: 0;
+                    border-bottom-right-radius: 0;
+                }
+                QPushButton:hover {
+                    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                        stop:0 #B48554, stop:1 #C49564);
+                }
+            """)
+
+    def paintEvent(self, event):
+        """绘制按钮和三角形箭头"""
+        super().paintEvent(event)
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        # 绘制白色三角形箭头
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QBrush(QColor("#FFFEF9")))
+
+        w, h = self.width(), self.height()
+        cx, cy = w // 2, h // 2  # 按钮中心点
+
+        # 箭头尺寸参数
+        arrow_height = 8  # 三角形半高
+        arrow_width = 8   # 三角形宽度
+        base_offset = arrow_width // 2  # 底边距中心的偏移（统一值）
+
+        if self.direction == "right":
+            # 右箭头 >: 底边在左，尖端在右
+            points = [
+                QPoint(cx - base_offset, cy - arrow_height),  # 底边上方
+                QPoint(cx + base_offset, cy),                  # 尖端
+                QPoint(cx - base_offset, cy + arrow_height),  # 底边下方
+            ]
+        else:
+            # 左箭头 <: 底边在右，尖端在左
+            points = [
+                QPoint(cx + base_offset, cy - arrow_height),  # 底边上方
+                QPoint(cx - base_offset, cy),                  # 尖端
+                QPoint(cx + base_offset, cy + arrow_height),  # 底边下方
+            ]
+
+        painter.drawPolygon(QPolygon(points))
+
+
+def create_arrow_icon(direction: str, size: int = 16, color: str = "#4A3F35") -> QIcon:
+    """
+    创建箭头图标，用于工具栏 QAction
+
+    Args:
+        direction: "right" 或 "left"
+        size: 图标尺寸
+        color: 箭头颜色
+
+    Returns:
+        QIcon 对象
+    """
+    pixmap = QPixmap(size, size)
+    pixmap.fill(Qt.GlobalColor.transparent)
+
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+    painter.setPen(Qt.PenStyle.NoPen)
+    painter.setBrush(QBrush(QColor(color)))
+
+    margin = 2
+    arrow_width = size - margin * 2
+    arrow_height = size - margin * 2
+
+    if direction == "right":
+        # 右箭头 >
+        points = [
+            QPoint(margin, margin),
+            QPoint(margin + arrow_width, size // 2),
+            QPoint(margin, size - margin),
+        ]
+    else:
+        # 左箭头 <
+        points = [
+            QPoint(margin + arrow_width, margin),
+            QPoint(margin, size // 2),
+            QPoint(margin + arrow_width, size - margin),
+        ]
+
+    painter.drawPolygon(QPolygon(points))
+    painter.end()
+
+    return QIcon(pixmap)
 
 
 class SkillGeneratorWorker(QThread):
@@ -188,7 +318,14 @@ class MainWindow(QMainWindow):
 
         # 左侧：笔记列表（包含工具栏）
         self.sidebar_container = QWidget()
+        self.sidebar_container.setObjectName("sidebar_container")  # 设置对象名称用于样式
         self.sidebar_container.setMinimumWidth(220)  # 设置最小宽度，确保工具栏显示完整
+        # 设置容器样式，防止意外滚动条
+        self.sidebar_container.setStyleSheet("""
+            #sidebar_container {
+                background-color: transparent;
+            }
+        """)
         sidebar_layout = QVBoxLayout(self.sidebar_container)
         sidebar_layout.setContentsMargins(0, 0, 0, 0)
         sidebar_layout.setSpacing(0)
@@ -200,7 +337,7 @@ class MainWindow(QMainWindow):
         sidebar_layout.addWidget(self.sidebar_toolbar)
 
         # 添加展开/关闭侧边栏按钮
-        self.toggle_sidebar_btn = QAction("◀", self)
+        self.toggle_sidebar_btn = QAction(create_arrow_icon("left"), "", self)
         self.toggle_sidebar_btn.setToolTip("收起侧边栏")
         self.toggle_sidebar_btn.triggered.connect(self._toggle_sidebar)
         self.sidebar_toolbar.addAction(self.toggle_sidebar_btn)
@@ -228,12 +365,12 @@ class MainWindow(QMainWindow):
         self.sidebar_toolbar.addAction(sync_action)
 
         # 导航按钮
-        self.back_action = QAction("◀", self)
+        self.back_action = QAction(create_arrow_icon("left"), "后退", self)
         self.back_action.setToolTip("后退")
         self.back_action.triggered.connect(self._on_back)
         self.sidebar_toolbar.addAction(self.back_action)
 
-        self.forward_action = QAction("▶", self)
+        self.forward_action = QAction(create_arrow_icon("right"), "前进", self)
         self.forward_action.setToolTip("前进")
         self.forward_action.triggered.connect(self._on_forward)
         self.sidebar_toolbar.addAction(self.forward_action)
@@ -251,7 +388,14 @@ class MainWindow(QMainWindow):
 
         # 右侧：AI 对话
         self.chat_container = QWidget()
+        self.chat_container.setObjectName("chat_container")  # 设置对象名称用于样式
         self.chat_container.setMinimumWidth(250)  # 设置最小宽度
+        # 明确禁用 chat_container 的滚动条
+        self.chat_container.setStyleSheet("""
+            #chat_container {
+                background-color: transparent;
+            }
+        """)
         chat_container_layout = QVBoxLayout(self.chat_container)
         chat_container_layout.setContentsMargins(0, 0, 0, 0)
         chat_container_layout.setSpacing(0)
@@ -260,7 +404,11 @@ class MainWindow(QMainWindow):
         chat_toolbar = QToolBar()
         chat_toolbar.setMovable(False)
         chat_toolbar.setFixedHeight(36)
-        self.toggle_chat_btn = QAction("▶", self)
+        # 添加一个 spacer 将按钮推到右侧
+        spacer = QWidget()
+        spacer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        chat_toolbar.addWidget(spacer)
+        self.toggle_chat_btn = QAction(create_arrow_icon("right"), "收起", self)
         self.toggle_chat_btn.setToolTip("收起 AI 对话")
         self.toggle_chat_btn.triggered.connect(self._toggle_chat_panel)
         chat_toolbar.addAction(self.toggle_chat_btn)
@@ -276,44 +424,28 @@ class MainWindow(QMainWindow):
 
         main_layout.addWidget(self.splitter)
 
-        # 左侧浮动展开按钮（当sidebar隐藏时，鼠标经过左边缘显示）
-        self.left_expand_btn = QPushButton("▶", self)
-        self.left_expand_btn.setFixedSize(20, 50)
+        # 左侧浮动展开按钮（当sidebar隐藏时显示）
+        self.left_expand_btn = ArrowButton("right", self)
         self.left_expand_btn.setToolTip("展开侧边栏")
         self.left_expand_btn.clicked.connect(self._toggle_sidebar)
-        self.left_expand_btn.setStyleSheet("""
-            QPushButton {
-                background-color: rgba(251, 247, 242, 200);
-                border: 1px solid #E8DFD5;
-                border-radius: 0 4px 4px 0;
-                color: #8B5A2B;
-                font-size: 10px;
-            }
-            QPushButton:hover {
-                background-color: #FDF6ED;
-                border-color: #D4A574;
-            }
-        """)
+        # 添加阴影效果
+        left_shadow = QGraphicsDropShadowEffect()
+        left_shadow.setBlurRadius(8)
+        left_shadow.setColor(Qt.GlobalColor.darkGray)
+        left_shadow.setOffset(2, 0)
+        self.left_expand_btn.setGraphicsEffect(left_shadow)
         self.left_expand_btn.hide()
 
-        # 右侧浮动展开按钮（当chat面板隐藏时，鼠标经过右边缘显示）
-        self.right_expand_btn = QPushButton("◀", self)
-        self.right_expand_btn.setFixedSize(20, 50)
+        # 右侧浮动展开按钮（当chat面板隐藏时显示）
+        self.right_expand_btn = ArrowButton("left", self)
         self.right_expand_btn.setToolTip("展开 AI 对话")
         self.right_expand_btn.clicked.connect(self._toggle_chat_panel)
-        self.right_expand_btn.setStyleSheet("""
-            QPushButton {
-                background-color: rgba(251, 247, 242, 200);
-                border: 1px solid #E8DFD5;
-                border-radius: 4px 0 0 4px;
-                color: #8B5A2B;
-                font-size: 10px;
-            }
-            QPushButton:hover {
-                background-color: #FDF6ED;
-                border-color: #D4A574;
-            }
-        """)
+        # 添加阴影效果
+        right_shadow = QGraphicsDropShadowEffect()
+        right_shadow.setBlurRadius(8)
+        right_shadow.setColor(Qt.GlobalColor.darkGray)
+        right_shadow.setOffset(-2, 0)
+        self.right_expand_btn.setGraphicsEffect(right_shadow)
         self.right_expand_btn.hide()
 
         # 记录浮动按钮是否应该可见
@@ -337,6 +469,9 @@ class MainWindow(QMainWindow):
             }
 
             /* 分割器 - 优雅的分隔线 */
+            QSplitter {
+                background-color: transparent;
+            }
             QSplitter::handle {
                 background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
                     stop:0 #E8DFD5, stop:0.5 #D4C4B0, stop:1 #E8DFD5);
@@ -348,13 +483,13 @@ class MainWindow(QMainWindow):
             }
 
             /* 侧边栏 - 温暖的米色卡片 */
-            Sidebar {
+            #sidebar {
                 background-color: #FBF7F2;
                 border-right: 1px solid #E8DFD5;
             }
 
             /* AI 对话面板 - 温暖的米色卡片 */
-            ChatPanel {
+            #chat_panel {
                 background-color: #FBF7F2;
                 border-left: 1px solid #E8DFD5;
             }
@@ -557,12 +692,12 @@ class MainWindow(QMainWindow):
             QMenuBar {
                 background-color: #FBF7F2;
                 border-bottom: 1px solid #E8DFD5;
-                padding: 6px 8px;
+                padding: 2px 8px;
                 font-size: 13px;
             }
             QMenuBar::item {
-                padding: 8px 14px;
-                border-radius: 6px;
+                padding: 4px 12px;
+                border-radius: 0;
                 color: #5A4A3A;
             }
             QMenuBar::item:selected {
@@ -577,22 +712,40 @@ class MainWindow(QMainWindow):
             QMenu {
                 background-color: #FFFEF9;
                 border: 2px solid #E8DFD5;
-                border-radius: 12px;
-                padding: 8px;
+                border-radius: 0;
+                padding: 4px;
+                margin: 0px;
             }
             QMenu::item {
-                padding: 10px 24px;
-                border-radius: 6px;
+                padding: 6px 16px;
+                border-radius: 0;
                 color: #3D3428;
+                background-color: transparent;
             }
             QMenu::item:selected {
                 background-color: #FDF6ED;
                 color: #8B5A2B;
             }
+            QMenu::item:disabled {
+                color: #B0A090;
+            }
             QMenu::separator {
                 height: 1px;
                 background: #E8DFD5;
                 margin: 8px 12px;
+            }
+            QMenu::indicator {
+                width: 16px;
+                height: 16px;
+                margin-left: 6px;
+            }
+            QMenu::right-arrow {
+                width: 12px;
+                height: 12px;
+                margin-right: 8px;
+            }
+            QMenu::scroller {
+                background-color: #FFFEF9;
             }
 
             /* 工具栏 - 紧凑的工具区 */
@@ -780,7 +933,8 @@ class MainWindow(QMainWindow):
         menubar = self.menuBar()
 
         # 文件菜单
-        file_menu = menubar.addMenu("文件(&F)")
+        file_menu = QMenu("文件(&F)", self)
+        menubar.addMenu(file_menu)
 
         new_action = QAction("新建笔记(&N)", self)
         new_action.setShortcut(QKeySequence.New)
@@ -800,7 +954,8 @@ class MainWindow(QMainWindow):
         file_menu.addAction(exit_action)
 
         # 编辑菜单
-        edit_menu = menubar.addMenu("编辑(&E)")
+        edit_menu = QMenu("编辑(&E)", self)
+        menubar.addMenu(edit_menu)
 
         delete_action = QAction("删除笔记(&D)", self)
         delete_action.setShortcut(QKeySequence.Delete)
@@ -808,7 +963,8 @@ class MainWindow(QMainWindow):
         edit_menu.addAction(delete_action)
 
         # 视图菜单
-        view_menu = menubar.addMenu("视图(&V)")
+        view_menu = QMenu("视图(&V)", self)
+        menubar.addMenu(view_menu)
 
         toggle_sidebar = QAction("切换侧边栏(&S)", self)
         toggle_sidebar.setShortcut(QKeySequence("Ctrl+B"))
@@ -821,7 +977,8 @@ class MainWindow(QMainWindow):
         view_menu.addAction(toggle_chat)
 
         # 设置菜单
-        settings_menu = menubar.addMenu("设置(&S)")
+        settings_menu = QMenu("设置(&S)", self)
+        menubar.addMenu(settings_menu)
 
         settings_action = QAction("偏好设置(&P)...", self)
         settings_action.setShortcut(QKeySequence.Preferences)
@@ -829,7 +986,8 @@ class MainWindow(QMainWindow):
         settings_menu.addAction(settings_action)
 
         # 帮助菜单
-        help_menu = menubar.addMenu("帮助(&H)")
+        help_menu = QMenu("帮助(&H)", self)
+        menubar.addMenu(help_menu)
 
         about_action = QAction("关于(&A)", self)
         about_action.triggered.connect(self._on_about)
@@ -1061,13 +1219,14 @@ class MainWindow(QMainWindow):
     @Slot()
     def _on_about(self) -> None:
         """关于对话框"""
+        version = get_version()
         QMessageBox.about(
             self,
             "关于 NoteAsSkill",
-            """<h3>NoteAsSkill - 笔记即技能</h3>
-            <p>版本: 0.1.0</p>
-            <p>每篇笔记自动成为一个 Claude Code Skill。</p>
-            <p>用户只需专注于编辑笔记内容，系统自动处理 SKILL.md 生成。</p>
+            f"""<h3>NoteAsSkill - 笔技</h3>
+            <p>版本: {version}</p>
+            <p>与 AI 共享你的心得。</p>
+            <p>只需专注于编辑笔记内容，系统自动处理 SKILL.md 生成。</p>
             """,
         )
 
@@ -1109,12 +1268,15 @@ class MainWindow(QMainWindow):
         """切换侧边栏显示"""
         if self.sidebar_container.isVisible():
             self.sidebar_container.hide()
-            self.toggle_sidebar_btn.setText("▶")
+            self.toggle_sidebar_btn.setIcon(create_arrow_icon("right"))
             self.toggle_sidebar_btn.setToolTip("展开侧边栏")
             self._left_btn_should_show = True
+            # 立即显示浮动展开按钮，用户无需移动鼠标到边缘
+            self._update_floating_buttons()
+            self.left_expand_btn.show()
         else:
             self.sidebar_container.show()
-            self.toggle_sidebar_btn.setText("◀")
+            self.toggle_sidebar_btn.setIcon(create_arrow_icon("left"))
             self.toggle_sidebar_btn.setToolTip("收起侧边栏")
             self._left_btn_should_show = False
             self.left_expand_btn.hide()
@@ -1124,12 +1286,15 @@ class MainWindow(QMainWindow):
         """切换 AI 对话面板显示"""
         if self.chat_container.isVisible():
             self.chat_container.hide()
-            self.toggle_chat_btn.setText("◀")
+            self.toggle_chat_btn.setIcon(create_arrow_icon("left"))
             self.toggle_chat_btn.setToolTip("展开 AI 对话")
             self._right_btn_should_show = True
+            # 立即显示浮动展开按钮
+            self._update_floating_buttons()
+            self.right_expand_btn.show()
         else:
             self.chat_container.show()
-            self.toggle_chat_btn.setText("▶")
+            self.toggle_chat_btn.setIcon(create_arrow_icon("right"))
             self.toggle_chat_btn.setToolTip("收起 AI 对话")
             self._right_btn_should_show = False
             self.right_expand_btn.hide()
@@ -1138,7 +1303,8 @@ class MainWindow(QMainWindow):
         """更新浮动按钮位置"""
         splitter_geo = self.splitter.geometry()
         btn_height = self.left_expand_btn.height()
-        y_pos = splitter_geo.top() + (splitter_geo.height() - btn_height) // 2
+        # 将按钮放在约 1/3 处，视觉上更舒适
+        y_pos = splitter_geo.top() + splitter_geo.height() // 3 - btn_height // 2
 
         # 左侧按钮
         self.left_expand_btn.move(0, y_pos)
@@ -1153,32 +1319,16 @@ class MainWindow(QMainWindow):
         self._update_floating_buttons()
 
     def mouseMoveEvent(self, event: Any) -> None:
-        """鼠标移动事件 - 检测边缘显示展开按钮"""
+        """鼠标移动事件 - 更新浮动按钮位置"""
         super().mouseMoveEvent(event)
-        pos = event.pos()
-        edge_threshold = 30  # 边缘检测阈值
-
-        # 左侧边缘检测
-        if self._left_btn_should_show:
-            if pos.x() <= edge_threshold:
-                self.left_expand_btn.show()
-                self._update_floating_buttons()
-            else:
-                self.left_expand_btn.hide()
-
-        # 右侧边缘检测
-        if self._right_btn_should_show:
-            if pos.x() >= self.width() - edge_threshold:
-                self.right_expand_btn.show()
-                self._update_floating_buttons()
-            else:
-                self.right_expand_btn.hide()
+        # 只在需要时更新按钮位置，不再控制显示/隐藏
+        if self._left_btn_should_show or self._right_btn_should_show:
+            self._update_floating_buttons()
 
     def leaveEvent(self, event: Any) -> None:
         """鼠标离开窗口事件"""
         super().leaveEvent(event)
-        self.left_expand_btn.hide()
-        self.right_expand_btn.hide()
+        # 不再隐藏按钮，让它们保持可见
 
     @Slot(str)
     def _on_folder_skill_updated(self, folder_name: str) -> None:
@@ -1199,6 +1349,21 @@ class MainWindow(QMainWindow):
         # 保存当前笔记
         if self._current_note:
             self._on_save()
+
+        # 停止 SkillGeneratorWorker 线程
+        if self._generator_worker is not None:
+            self._generator_worker.requestInterruption()
+            if not self._generator_worker.wait(2000):
+                self._generator_worker.terminate()
+                self._generator_worker.wait()
+            self._generator_worker = None
+
+        # 停止 ChatPanel 中的工作线程
+        self.chat_panel.cleanup()
+
+        # 停止 FolderSkillUpdater 的定时器
+        if hasattr(self, '_folder_skill_updater'):
+            self._folder_skill_updater.update_timer.stop()
 
         event.accept()
 
