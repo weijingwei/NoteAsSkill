@@ -77,12 +77,23 @@ class DropableTreeWidget(QTreeWidget):
         if item is None or item.childCount() == 0:
             return
 
+        # 先填充背景色，覆盖 Qt 默认的黑底
+        painter.fillRect(rect, QColor("#FFFEF9"))  # 象牙白背景
+
         # 三角形参数
         size = 8  # 三角形大小
-        margin = 4  # 左边距
 
-        # 计算三角形位置
-        x = rect.left() + margin
+        # 计算三角形位置：紧挨文字左侧
+        # 需要考虑 indentation
+        indentation = self.indentation()
+        depth = 0
+        parent = item.parent()
+        while parent:
+            depth += 1
+            parent = parent.parent()
+
+        # 三角形放在当前层级缩进之后
+        x = rect.left() + depth * indentation + 4
         y = rect.top() + (rect.height() - size) // 2
 
         # 设置绘制样式

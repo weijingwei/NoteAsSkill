@@ -120,15 +120,16 @@ class ChatPanel(QWidget):
             QComboBox QAbstractItemView {
                 background-color: #FFFEF9;
                 border: 1px solid #E8DFD5;
-                border-radius: 6px;
                 padding: 4px;
                 selection-background-color: #FDF6ED;
                 selection-color: #8B5A2B;
                 outline: none;
+                alternate-background-color: #FFFEF9;
             }
             QComboBox QAbstractItemView::item {
                 padding: 4px 8px;
                 min-height: 24px;
+                background-color: #FFFEF9;
             }
             QComboBox QAbstractItemView::item:hover {
                 background-color: #FDF8F0;
