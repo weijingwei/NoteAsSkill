@@ -8,7 +8,7 @@
 from typing import Any
 
 from PySide6.QtCore import Qt, Signal, Slot, QMimeData, QRect
-from PySide6.QtGui import QAction, QDrag, QPainter, QColor, QFont
+from PySide6.QtGui import QAction, QDrag, QPainter, QColor, QFont, QPolygon
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QInputDialog,
@@ -72,43 +72,46 @@ class DropableTreeWidget(QTreeWidget):
         self._drag_over_item: QTreeWidgetItem | None = None
 
     def drawBranches(self, painter: QPainter, rect: QRect, index) -> None:
-        """自定义绘制展开/收起按钮，使用简单的+/-"""
-        # 从index获取item
+        """自定义绘制展开/收起按钮，使用三角形指示器"""
         item = self.itemFromIndex(index)
         if item is None or item.childCount() == 0:
             return
 
-        # 计算按钮位置
-        button_size = 12
-        button_rect = QRect(
-            rect.left() + 2,
-            rect.top() + (rect.height() - button_size) // 2,
-            button_size,
-            button_size
-        )
+        # 三角形参数
+        size = 8  # 三角形大小
+        margin = 4  # 左边距
+
+        # 计算三角形位置
+        x = rect.left() + margin
+        y = rect.top() + (rect.height() - size) // 2
 
         # 设置绘制样式
         painter.save()
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
-        # 绘制背景圆
-        painter.setBrush(QColor("#FDF6ED"))
-        painter.setPen(QColor("#D4A574"))
-        painter.drawEllipse(button_rect)
-
-        # 绘制+或-
-        painter.setPen(QColor("#8B5A2B"))
-        font = QFont()
-        font.setPointSize(10)
-        font.setBold(True)
-        painter.setFont(font)
+        # 三角形颜色（与文字颜色协调）
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QColor("#8B5A2B"))  # 棕色
 
         if item.isExpanded():
-            # 展开状态，绘制-
-            painter.drawText(button_rect, Qt.AlignmentFlag.AlignCenter, "-")
+            # 展开状态：向下三角形 ▼
+            points = [
+                (x, y),
+                (x + size, y),
+                (x + size // 2, y + size)
+            ]
         else:
-            # 收起状态，绘制+
-            painter.drawText(button_rect, Qt.AlignmentFlag.AlignCenter, "+")
+            # 收起状态：向右三角形 ▶
+            points = [
+                (x, y),
+                (x + size, y + size // 2),
+                (x, y + size)
+            ]
+
+        polygon = QPolygon()
+        for px, py in points:
+            polygon.append((px, py))
+        painter.drawPolygon(polygon)
 
         painter.restore()
 
