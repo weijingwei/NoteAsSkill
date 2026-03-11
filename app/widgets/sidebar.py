@@ -7,7 +7,7 @@
 
 from typing import Any
 
-from PySide6.QtCore import Qt, Signal, Slot, QMimeData, QRect
+from PySide6.QtCore import Qt, Signal, Slot, QMimeData, QRect, QPoint
 from PySide6.QtGui import QAction, QDrag, QPainter, QColor, QFont, QPolygon
 from PySide6.QtWidgets import (
     QHBoxLayout,
@@ -110,7 +110,7 @@ class DropableTreeWidget(QTreeWidget):
 
         polygon = QPolygon()
         for px, py in points:
-            polygon.append((px, py))
+            polygon.append(QPoint(px, py))
         painter.drawPolygon(polygon)
 
         painter.restore()
