@@ -93,6 +93,47 @@ class ChatPanel(QWidget):
 
         self.mode_combo = QComboBox()
         self.mode_combo.addItems([self.MODE_SKILL, self.MODE_QA, self.MODE_CHAT])
+        # 扁平简约风格样式
+        self.mode_combo.setStyleSheet("""
+            QComboBox {
+                background-color: #FFFEF9;
+                border: 1px solid #E8DFD5;
+                border-radius: 6px;
+                padding: 4px 8px;
+                color: #4A3F35;
+                min-width: 100px;
+            }
+            QComboBox:hover {
+                background-color: #FDF8F0;
+            }
+            QComboBox::drop-down {
+                border: none;
+                width: 20px;
+            }
+            QComboBox::down-arrow {
+                image: none;
+                border-left: 4px solid transparent;
+                border-right: 4px solid transparent;
+                border-top: 6px solid #8B5A2B;
+                margin-right: 6px;
+            }
+            QComboBox QAbstractItemView {
+                background-color: #FFFEF9;
+                border: 1px solid #E8DFD5;
+                border-radius: 6px;
+                padding: 4px;
+                selection-background-color: #FDF6ED;
+                selection-color: #8B5A2B;
+                outline: none;
+            }
+            QComboBox QAbstractItemView::item {
+                padding: 4px 8px;
+                min-height: 24px;
+            }
+            QComboBox QAbstractItemView::item:hover {
+                background-color: #FDF8F0;
+            }
+        """)
         mode_layout.addWidget(self.mode_combo)
 
         layout.addLayout(mode_layout)
