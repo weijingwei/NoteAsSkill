@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
     QTextEdit,
     QVBoxLayout,
     QWidget,
+    QListView,
 )
 
 from ..ai.client import create_client
@@ -92,6 +93,7 @@ class ChatPanel(QWidget):
         mode_layout.addWidget(mode_label)
 
         self.mode_combo = QComboBox()
+        self.mode_combo.setView(QListView())  # 强制使用 Qt 标准渲染
         self.mode_combo.addItems([self.MODE_SKILL, self.MODE_QA, self.MODE_CHAT])
         # 扁平简约风格样式
         self.mode_combo.setStyleSheet("""

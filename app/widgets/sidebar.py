@@ -248,6 +248,11 @@ class Sidebar(QWidget):
                 background-color: transparent;
                 border-image: none;
             }
+            QTreeWidget::branch:!has-children {
+                background-color: transparent;
+                border-image: none;
+                image: none;
+            }
         """)
         layout.addWidget(self.folder_tree)
 
