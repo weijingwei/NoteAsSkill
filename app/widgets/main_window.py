@@ -230,6 +230,8 @@ class MainWindow(QMainWindow):
 
         # 当前笔记
         self._current_note: Note | None = None
+        # 已保存的内容（用于检测未保存的更改）
+        self._saved_content: str = ""
 
     def _init_folder_skill_updater(self) -> None:
         """初始化文件夹 SKILL 更新器"""
@@ -363,17 +365,6 @@ class MainWindow(QMainWindow):
         sync_action.setToolTip("同步笔记到 Git 仓库")
         sync_action.triggered.connect(self._on_git_sync)
         self.sidebar_toolbar.addAction(sync_action)
-
-        # 导航按钮
-        self.back_action = QAction(create_arrow_icon("left"), "后退", self)
-        self.back_action.setToolTip("后退")
-        self.back_action.triggered.connect(self._on_back)
-        self.sidebar_toolbar.addAction(self.back_action)
-
-        self.forward_action = QAction(create_arrow_icon("right"), "前进", self)
-        self.forward_action.setToolTip("前进")
-        self.forward_action.triggered.connect(self._on_forward)
-        self.sidebar_toolbar.addAction(self.forward_action)
 
         # 侧边栏
         self.sidebar = Sidebar()
@@ -843,6 +834,7 @@ class MainWindow(QMainWindow):
             QCheckBox::indicator:checked {
                 background-color: #D4A574;
                 border-color: #D4A574;
+                image: url(assets/checkmark.svg);
             }
             QCheckBox::indicator:hover {
                 border-color: #D4A574;
@@ -1038,12 +1030,11 @@ class MainWindow(QMainWindow):
 
         content = self.editor.get_content()
 
-        # 保存当前内容到编辑历史
-        self.editor.save_current_to_history()
-        self._update_nav_buttons()
-
         note_manager = get_note_manager()
         note_manager.update_note(self._current_note.id, content=content)
+
+        # 更新已保存内容
+        self._saved_content = content
 
         self.statusbar.showMessage("已保存", 3000)
 
@@ -1051,6 +1042,33 @@ class MainWindow(QMainWindow):
         config = get_config()
         if config.auto_generate_skill:
             self._generate_skill_md_async(self._current_note.id, content)
+
+    def _has_unsaved_changes(self) -> bool:
+        """检查当前笔记是否有未保存的更改"""
+        if self._current_note is None:
+            return False
+        current_content = self.editor.get_content()
+        return current_content != self._saved_content
+
+    def _prompt_unsaved_changes(self) -> bool:
+        """提示用户保存未保存的更改
+
+        Returns:
+            True 表示可以继续操作（已保存或放弃），False 表示取消操作
+        """
+        reply = QMessageBox.question(
+            self,
+            "未保存的更改",
+            "当前笔记有未保存的更改，是否保存？",
+            QMessageBox.StandardButton.Save |
+            QMessageBox.StandardButton.Discard |
+            QMessageBox.StandardButton.Cancel
+        )
+        if reply == QMessageBox.StandardButton.Cancel:
+            return False
+        elif reply == QMessageBox.StandardButton.Save:
+            self._on_save()
+        return True
 
     def _generate_skill_md_async(self, note_id: str, content: str) -> None:
         """异步生成 SKILL.md"""
@@ -1116,17 +1134,24 @@ class MainWindow(QMainWindow):
     @Slot(Note)
     def _on_note_selected(self, note: Note) -> None:
         """笔记被选中"""
+        # 检查是否有未保存的内容
+        if self._current_note and self._has_unsaved_changes():
+            if not self._prompt_unsaved_changes():
+                # 用户取消操作，恢复侧边栏选中状态
+                self.sidebar.restore_note_selection(self._current_note.id)
+                return
+
         self._current_note = note
 
         note_manager = get_note_manager()
         content = note_manager.get_note_content(note.id)
         self.editor.set_content(content, note.title, note.id)
 
+        # 记录已保存的内容
+        self._saved_content = content
+
         # 更新 AI 对话面板的笔记内容
         self.chat_panel.set_current_note(note.title, content)
-
-        # 更新导航按钮状态
-        self._update_nav_buttons()
 
         self.statusbar.showMessage(f"已打开: {note.title}")
 
@@ -1135,6 +1160,9 @@ class MainWindow(QMainWindow):
         """笔记被创建"""
         self._current_note = note
         self.editor.set_content("", note.title, note.id)
+
+        # 新笔记的已保存内容为空
+        self._saved_content = ""
 
         # 更新 AI 对话面板
         self.chat_panel.set_current_note(note.title, "")
@@ -1146,6 +1174,7 @@ class MainWindow(QMainWindow):
         """笔记被删除"""
         if self._current_note and self._current_note.id == note_id:
             self._current_note = None
+            self._saved_content = ""
             self.editor.clear()
 
     @Slot(str, str, str)
@@ -1229,39 +1258,6 @@ class MainWindow(QMainWindow):
             <p>只需专注于编辑笔记内容，系统自动处理 SKILL.md 生成。</p>
             """,
         )
-
-    @Slot()
-    def _on_back(self) -> None:
-        """后退 - 撤销编辑"""
-        content = self.editor.go_back()
-        if content is not None:
-            # 设置编辑器内容（不添加到历史）
-            js = f"""
-            if (typeof editor !== 'undefined' && editor) {{
-                editor.value({repr(content)});
-            }}
-            """
-            self.editor.web_view.page().runJavaScript(js)
-            self._update_nav_buttons()
-
-    @Slot()
-    def _on_forward(self) -> None:
-        """前进 - 重做编辑"""
-        content = self.editor.go_forward()
-        if content is not None:
-            # 设置编辑器内容（不添加到历史）
-            js = f"""
-            if (typeof editor !== 'undefined' && editor) {{
-                editor.value({repr(content)});
-            }}
-            """
-            self.editor.web_view.page().runJavaScript(js)
-            self._update_nav_buttons()
-
-    def _update_nav_buttons(self) -> None:
-        """更新导航按钮状态"""
-        self.back_action.setEnabled(self.editor.can_go_back())
-        self.forward_action.setEnabled(self.editor.can_go_forward())
 
     @Slot()
     def _toggle_sidebar(self) -> None:
