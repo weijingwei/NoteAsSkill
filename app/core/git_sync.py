@@ -57,7 +57,9 @@ class GitSyncWorker(QThread):
                 ["git", "pull", "origin", current_branch],
                 cwd=str(self.notebook_path),
                 capture_output=True,
-                text=True
+                text=True,
+                encoding='utf-8',
+                errors='replace'
             )
 
             if pull_result.returncode != 0:
@@ -124,7 +126,9 @@ class GitSyncWorker(QThread):
                 ["git", "push", "-u", "origin", current_branch],
                 cwd=str(self.notebook_path),
                 capture_output=True,
-                text=True
+                text=True,
+                encoding='utf-8',
+                errors='replace'
             )
 
             if push_result.returncode != 0:
@@ -135,7 +139,9 @@ class GitSyncWorker(QThread):
                     ["git", "pull", "--rebase", "origin", current_branch],
                     cwd=str(self.notebook_path),
                     capture_output=True,
-                    text=True
+                    text=True,
+                    encoding='utf-8',
+                    errors='replace'
                 )
 
                 if pull_result.returncode != 0:
@@ -148,7 +154,9 @@ class GitSyncWorker(QThread):
                     ["git", "push", "-u", "origin", current_branch],
                     cwd=str(self.notebook_path),
                     capture_output=True,
-                    text=True
+                    text=True,
+                    encoding='utf-8',
+                    errors='replace'
                 )
 
                 if retry_result.returncode != 0:
@@ -181,6 +189,8 @@ class GitSyncWorker(QThread):
         kwargs = {
             "cwd": str(self.notebook_path),
             "text": True,
+            "encoding": 'utf-8',
+            "errors": 'replace',
         }
 
         if capture:
