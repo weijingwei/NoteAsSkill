@@ -300,7 +300,7 @@ class NoteManager:
         folder: str | None = None,
         tags: list[str] | None = None,
     ) -> list[Note]:
-        """列出笔记"""
+        """列出笔记（按标题自然排序）"""
         notes = list(self._notes.values())
 
         if folder is not None:
@@ -309,8 +309,16 @@ class NoteManager:
         if tags:
             notes = [n for n in notes if any(tag in n.tags for tag in tags)]
 
-        notes.sort(key=lambda n: n.updated_at, reverse=True)
+        # 自然排序：支持标题中的数字排序（如 1. 2. 10.）
+        notes.sort(key=lambda n: self._natural_sort_key(n.title))
         return notes
+
+    @staticmethod
+    def _natural_sort_key(text: str) -> list:
+        """自然排序键，支持数字排序"""
+        import re
+        return [int(part) if part.isdigit() else part.lower()
+                for part in re.split(r'(\d+)', text)]
 
     def search_notes(self, query: str) -> list[Note]:
         """搜索笔记"""

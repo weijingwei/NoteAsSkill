@@ -28,7 +28,7 @@ from ..core.note_manager import Note, Folder, get_note_manager
 
 
 class DraggableListWidget(QListWidget):
-    """支持拖拽的列表控件"""
+    """支持拖拽到文件夹的列表控件"""
 
     note_dragged = Signal(str, str)  # (note_id, target_folder)
 
@@ -183,6 +183,7 @@ class Sidebar(QWidget):
     note_created = Signal(Note)
     note_deleted = Signal(str)
     note_moved = Signal(str, str, str)  # (note_id, old_folder, new_folder)
+    note_selection_rejected = Signal(str)  # (note_id) 笔记选择被拒绝，需要恢复选中状态
 
     def __init__(self):
         super().__init__()
@@ -215,28 +216,6 @@ class Sidebar(QWidget):
         self.new_folder_btn = QPushButton("+ 新建")
         self.new_folder_btn.setToolTip("新建文件夹")
         self.new_folder_btn.setMinimumWidth(60)
-        # 直接设置按钮样式，确保继承全局样式
-        self.new_folder_btn.setStyleSheet("""
-            QPushButton {
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                    stop:0 #D4A574, stop:1 #C49564);
-                color: #FFFEF9;
-                border: none;
-                border-radius: 8px;
-                padding: 6px 12px;
-                font-size: 13px;
-                font-weight: 600;
-            }
-            QPushButton:hover {
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                    stop:0 #C49564, stop:1 #B48554);
-            }
-            QPushButton:pressed {
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                    stop:0 #B48554, stop:1 #A47544);
-            }
-        """)
-        # 直接设置按钮样式，确保继承全局样式
         self.new_folder_btn.setStyleSheet("""
             QPushButton {
                 background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
@@ -308,7 +287,7 @@ class Sidebar(QWidget):
         notes_label.setStyleSheet("font-weight: 600; color: #5A4A3A;")
         layout.addWidget(notes_label)
 
-        # 笔记列表（支持拖拽）
+        # 笔记列表（支持拖拽到文件夹）
         self.note_list = DraggableListWidget()
         layout.addWidget(self.note_list, 1)
 
@@ -451,13 +430,15 @@ class Sidebar(QWidget):
                 parent = parent.parent()
 
     def _load_notes(self, filter_tag: str | None = None) -> None:
-        """加载笔记列表"""
+        """加载笔记列表（按标题自然排序）"""
         self.note_list.clear()
 
         note_manager = get_note_manager()
 
         if filter_tag:
             notes = note_manager.get_notes_by_tag(filter_tag)
+            # 标签筛选时也按标题排序
+            notes.sort(key=lambda n: note_manager._natural_sort_key(n.title))
         elif self._current_folder:
             notes = note_manager.list_notes(folder=self._current_folder)
         else:
@@ -466,7 +447,7 @@ class Sidebar(QWidget):
         for note in notes:
             item = QListWidgetItem(note.title)
             item.setData(Qt.ItemDataRole.UserRole, note.id)
-            item.setToolTip(f"更新: {note.updated_at.strftime('%Y-%m-%d %H:%M')}")
+            item.setToolTip(f"创建: {note.created_at.strftime('%Y-%m-%d %H:%M')} | 更新: {note.updated_at.strftime('%Y-%m-%d %H:%M')}")
 
             if note.tags:
                 item.setText(f"{note.title} {' '.join(f'#{t}' for t in note.tags)}")
@@ -506,10 +487,19 @@ class Sidebar(QWidget):
             item.setData(Qt.ItemDataRole.UserRole, note.id)
             self.note_list.addItem(item)
 
+    def restore_note_selection(self, note_id: str) -> None:
+        """恢复笔记列表中的选中状态（当笔记切换被取消时）"""
+        for i in range(self.note_list.count()):
+            item = self.note_list.item(i)
+            if item and item.data(Qt.ItemDataRole.UserRole) == note_id:
+                self.note_list.setCurrentItem(item)
+                break
+
     @Slot(QListWidgetItem)
     def _on_note_clicked(self, item: QListWidgetItem) -> None:
         """笔记被点击"""
         note_id = item.data(Qt.ItemDataRole.UserRole)
+        self._current_note_id = note_id  # 记录当前选中的笔记ID
         note_manager = get_note_manager()
         note = note_manager.get_note(note_id)
 

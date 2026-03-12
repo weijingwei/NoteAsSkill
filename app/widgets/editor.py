@@ -7,7 +7,7 @@ import os
 import logging
 from typing import Any
 
-from PySide6.QtCore import QUrl, Signal, Slot, QObject, Qt
+from PySide6.QtCore import QUrl, Signal, Slot, QObject, Qt, QEvent, QTimer
 from PySide6.QtWebChannel import QWebChannel
 from PySide6.QtWebEngineWidgets import QWebEngineView
 from PySide6.QtWidgets import QWidget, QVBoxLayout
@@ -28,21 +28,29 @@ EDITOR_HTML_TEMPLATE = """
     <link rel="stylesheet" href="{fa_css_path}">
     <link rel="stylesheet" href="{easymde_css_path}">
     <style>
-        body {{
+        html, body {{
             margin: 0;
             padding: 0;
+            height: 100%;
+            overflow: hidden;
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
         }}
         .EasyMDEContainer {{
-            height: 100vh;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
         }}
         .CodeMirror {{
-            height: 100% !important;
+            height: auto !important;
+            flex: 1;
             border: none !important;
             font-size: {font_size}px;
         }}
         .editor-preview {{
             font-size: {font_size}px;
+        }}
+        .CodeMirror-scroll {{
+            overflow-y: auto !important;
         }}
         /* 确保工具栏可见 - 高度与左右工具栏一致 (36px) */
         .editor-toolbar {{
@@ -57,6 +65,7 @@ EDITOR_HTML_TEMPLATE = """
             height: 36px !important;
             min-height: 36px !important;
             box-sizing: border-box !important;
+            flex-shrink: 0;
         }}
         .editor-toolbar button {{
             color: #5A4A3A !important;
@@ -84,6 +93,7 @@ EDITOR_HTML_TEMPLATE = """
                 spellChecker: false,
                 status: false,
                 toolbar: [
+                    'undo', 'redo', '|',
                     'bold', 'italic', 'heading', '|',
                     'quote', 'unordered-list', 'ordered-list', '|',
                     'link', 'image', 'code', '|',
@@ -150,6 +160,15 @@ class EditorWebView(QWebEngineView):
         self._current_font_size = 14  # 默认字体大小
         # 确保 zoomFactor 始终为 1.0，禁用页面级别的缩放
         self.setZoomFactor(1.0)
+        # 定时器用于强制重置 zoomFactor
+        self._zoom_reset_timer = QTimer(self)
+        self._zoom_reset_timer.timeout.connect(self._force_reset_zoom)
+
+    def _force_reset_zoom(self) -> None:
+        """强制重置 zoomFactor 为 1.0"""
+        if self.zoomFactor() != 1.0:
+            self.setZoomFactor(1.0)
+        self._zoom_reset_timer.stop()
 
     def set_font_size(self, size: int) -> None:
         """设置编辑器字体大小"""
@@ -163,34 +182,30 @@ class EditorWebView(QWebEngineView):
         }}
         """
         self.page().runJavaScript(js)
+        # 立即重置 zoomFactor 并启动定时器确保重置
+        self.setZoomFactor(1.0)
+        self._zoom_reset_timer.start(50)  # 50ms 后再次检查
 
     def get_font_size(self) -> int:
         """获取当前字体大小"""
         return self._current_font_size
 
     def wheelEvent(self, event: QWheelEvent) -> None:
-        """处理滚轮事件，拦截 Ctrl + 滚动"""
-        # 检查是否按下了 Ctrl 键
+        """处理滚轮事件，拦截 Ctrl + 滚动缩放字体"""
         if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
             # 计算新的字体大小
             delta = event.angleDelta().y()
             if delta > 0:
-                # 向上滚动，放大字体
                 new_size = self._current_font_size + self.FONT_SIZE_STEP
             else:
-                # 向下滚动，缩小字体
                 new_size = self._current_font_size - self.FONT_SIZE_STEP
 
-            # 限制范围
+            # 限制范围并应用
             if self.MIN_FONT_SIZE <= new_size <= self.MAX_FONT_SIZE:
                 self.set_font_size(new_size)
 
-            # 接受事件，阻止默认的页面缩放行为
+            # 接受事件，阻止传递到 Chromium
             event.accept()
-            # 强制确保 zoomFactor 始终为 1.0，防止工具栏被缩放
-            # 这是关键：即使 Chromium 内部处理了缩放，我们也立即重置
-            if self.zoomFactor() != 1.0:
-                self.setZoomFactor(1.0)
             return
 
         # 非 Ctrl + 滚动，使用默认行为
@@ -203,19 +218,12 @@ class Editor(QWidget):
     content_changed = Signal()
     save_requested = Signal()
 
-    MAX_HISTORY = 20  # 最大历史记录数
-
     def __init__(self):
         super().__init__()
 
         self._bridge = EditorBridge()
         self._channel = QWebChannel()
         self._channel.registerObject("bridge", self._bridge)
-
-        # 编辑历史 - 每个笔记独立的历史记录
-        # 结构: {note_id: {"history": [content1, content2, ...], "index": int}}
-        self._note_histories: dict[str, dict] = {}
-        self._current_note_id: str = ""
 
         self._init_ui()
         self._connect_signals()
@@ -295,97 +303,6 @@ class Editor(QWidget):
 
         if title:
             self.setWindowTitle(title)
-
-        # 切换笔记时初始化历史记录
-        if note_id and note_id != self._current_note_id:
-            self._current_note_id = note_id
-            # 为新笔记创建历史记录
-            if note_id not in self._note_histories:
-                self._note_histories[note_id] = {
-                    "history": [content],
-                    "index": 0
-                }
-
-    def _add_to_history(self, content: str) -> None:
-        """添加内容到当前笔记的历史记录"""
-        if not self._current_note_id:
-            return
-
-        note_history = self._note_histories.get(self._current_note_id)
-        if not note_history:
-            return
-
-        history = note_history["history"]
-        index = note_history["index"]
-
-        # 如果当前不在历史末尾，截断后面的记录
-        if index < len(history) - 1:
-            history = history[:index + 1]
-            note_history["history"] = history
-
-        # 如果内容与最后一个记录相同，不添加
-        if history and history[-1] == content:
-            return
-
-        # 添加新记录
-        history.append(content)
-
-        # 限制历史记录数量
-        if len(history) > self.MAX_HISTORY:
-            history.pop(0)
-            note_history["index"] = len(history) - 1
-        else:
-            note_history["index"] = len(history) - 1
-
-    def save_current_to_history(self) -> None:
-        """保存当前内容到历史记录（由外部调用）"""
-        if not self._current_note_id:
-            return
-
-        # 获取当前内容
-        def callback(content: str) -> None:
-            if content:
-                self._add_to_history(content)
-
-        self.web_view.page().runJavaScript("editor ? editor.value() : '';", callback)
-
-    def can_go_back(self) -> bool:
-        """是否可以后退"""
-        if not self._current_note_id:
-            return False
-        note_history = self._note_histories.get(self._current_note_id)
-        if not note_history:
-            return False
-        return note_history["index"] > 0
-
-    def can_go_forward(self) -> bool:
-        """是否可以前进"""
-        if not self._current_note_id:
-            return False
-        note_history = self._note_histories.get(self._current_note_id)
-        if not note_history:
-            return False
-        return note_history["index"] < len(note_history["history"]) - 1
-
-    def go_back(self) -> str | None:
-        """后退，返回内容"""
-        if not self.can_go_back():
-            return None
-
-        note_history = self._note_histories[self._current_note_id]
-        note_history["index"] -= 1
-        content = note_history["history"][note_history["index"]]
-        return content
-
-    def go_forward(self) -> str | None:
-        """前进，返回内容"""
-        if not self.can_go_forward():
-            return None
-
-        note_history = self._note_histories[self._current_note_id]
-        note_history["index"] += 1
-        content = note_history["history"][note_history["index"]]
-        return content
 
     def get_content(self) -> str:
         """获取编辑器内容"""
