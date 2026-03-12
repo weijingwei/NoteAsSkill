@@ -1,71 +1,76 @@
 ---
-name: ai-coding-toolchain-setup
+name: dev-tools-installation
 description: |
-  用于配置 AI 辅助开发环境的技能文档。
-  记录并指导 Trae、Claude Code 和 cc-switch 的安装与配置流程。
-  适用于快速搭建具备 AI 编程能力的开发工作站。
-allowed-tools: [Bash, Read, Write]
+  记录并指导开发环境核心工具的安装流程，涵盖 trea、claude code 和 cc-switch。
+  适用于新环境初始化、开发工具配置或工作记录归档的场景。
+  该技能确保关键开发工具能够正确部署并投入使用。
+allowed-tools: [Read, Write, Bash]
 parameters:
-  - name: install_scope
-    type: string
-    description: 安装范围，可选 'all' 或单独工具名称（如 'claude-code'）
+  - name: tools_list
+    type: array
+    description: 需要安装的工具列表，默认包含笔记中记录的三个工具
     required: false
-    default: "all"
+    default: ["trea", "claude code", "cc-switch"]
+  - name: log_output
+    type: string
+    description: 安装日志的输出路径
+    default: "./install.log"
 returns:
   type: object
-  description: 包含各组件安装状态的报告对象
+  description: 包含安装状态、版本信息和错误日志的报告对象
 ---
 
 ## 概述
 
-本技能文档基于工作记录，总结了 Trae（AI IDE）、Claude Code（CLI 工具）以及 cc-switch（代理切换工具）的安装配置过程，旨在帮助用户快速复现该开发环境。
+本技能基于工作记录，提供了 trea、claude code 和 cc-switch 三个开发工具的安装指南。它旨在帮助快速复现开发环境配置，确保工作流的连续性。
 
 ## 使用场景
 
-- 在新机器上搭建 AI 辅助编程环境。
-- 需要使用 Claude Code 进行代码生成和调试。
-- 需要通过 cc-switch 管理多个 AI 模型代理。
+- 新工作站或服务器的环境初始化
+- 重新配置或修复损坏的开发工具链
+- 记录和归档环境配置步骤
 
 ## 详细步骤
 
-### 1. Trae (Trea) 安装
+根据工作记录，安装流程如下：
 
-Trae 是新一代 AI IDE。
+1. **安装 trea**
+   执行 trea 的安装程序或包管理命令。
+   ```bash
+   # 示例命令，具体视 trea 官方文档而定
+   brew install trea 
+   ```
 
-*注意：笔记中记录为 "trea"，推测为 "Trae" 的笔误。*
+2. **安装 claude code**
+   部署 Claude Code CLI 工具，确保环境变量配置正确。
+   ```bash
+   # 示例安装脚本
+   npm install -g @anthropic/claude-code
+   ```
+
+3. **安装 cc-switch**
+   配置 cc-switch 工具用于环境切换或配置管理。
+   ```bash
+   # 示例安装流程
+   git clone [cc-switch-repo]
+   cd cc-switch && ./install.sh
+   ```
+
+## 示例
+
+以下是一次完整的安装验证流程：
 
 ```bash
-# 通常通过官网下载安装包或使用包管理器
-# 示例 (macOS):
-# brew install --cask trae
-```
+# 检查工具是否安装成功
+trea --version
+claude-code --version
+cc-switch --status
 
-### 2. Claude Code 安装
-
-Claude Code 是 Anthropic 提供的终端 AI 助手。
-
-```bash
-# 使用 npm 全局安装
-npm install -g @anthropic-ai/claude-code
-
-# 验证安装
-claude --version
-```
-
-### 3. cc-switch 安装
-
-cc-switch 用于切换 Claude Code 的后端代理配置。
-
-```bash
-# 示例：从源码安装
-git clone https://github.com/example/cc-switch.git
-cd cc-switch
-npm install
-npm link
+echo "所有工具安装完成"
 ```
 
 ## 注意事项
 
-- **环境依赖**：Claude Code 依赖 Node.js 环境，请确保 Node.js 版本 >= 18。
-- **网络配置**：安装过程中可能需要访问国际网络，请确保代理配置正确。
-- **名称辨析**：笔记中的 "trea" 已修正为 "Trae"，请在实际操作中注意区分。
+- 请确保网络连接稳定，部分工具可能需要访问海外资源。
+- 建议在安装前更新系统的包管理器（如 brew, apt, npm）。
+- 如果安装过程中断，请检查依赖项是否满足要求。
