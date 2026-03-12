@@ -20,12 +20,61 @@ class GitSyncWorker(QThread):
     success = Signal(str)        # 成功消息
     error = Signal(str)          # 错误消息
 
-    def __init__(self, notebook_path: Path):
+    def __init__(self, notebook_path: Path, pull_only: bool = False):
         super().__init__()
         self.notebook_path = notebook_path
+        self.pull_only = pull_only
 
     def run(self) -> None:
         """执行同步"""
+        if self.pull_only:
+            self._run_pull_only()
+        else:
+            self._run_sync()
+
+    def _run_pull_only(self) -> None:
+        """仅执行拉取操作（启动时自动拉取）"""
+        config = get_config()
+
+        # 检查 git 是否初始化
+        git_dir = self.notebook_path / ".git"
+        if not git_dir.exists():
+            # 未初始化，静默返回
+            return
+
+        # 检查是否配置了远程仓库
+        if not config.git_remote_url:
+            return
+
+        try:
+            # 获取当前分支
+            branch_result = self._run_git("rev-parse", "--abbrev-ref", "HEAD", capture=True)
+            current_branch = branch_result.strip() if branch_result.strip() else config.git_branch
+
+            # 拉取
+            self.progress.emit("正在拉取远程更改...")
+            pull_result = subprocess.run(
+                ["git", "pull", "origin", current_branch],
+                cwd=str(self.notebook_path),
+                capture_output=True,
+                text=True
+            )
+
+            if pull_result.returncode != 0:
+                self.error.emit(f"拉取失败: {pull_result.stderr.strip()}")
+                return
+
+            # 检查是否有更新
+            if "Already up to date" in pull_result.stdout or "Already up-to-date" in pull_result.stdout:
+                self.success.emit("本地已是最新")
+            else:
+                self.success.emit("拉取完成")
+
+        except Exception as e:
+            self.error.emit(f"拉取失败: {str(e)}")
+
+    def _run_sync(self) -> None:
+        """执行完整同步（保存时推送）"""
         config = get_config()
 
         if not config.git_enabled:
@@ -65,16 +114,46 @@ class GitSyncWorker(QThread):
 
             # 6. 推送
             self.progress.emit("正在推送...")
-            branch = config.git_branch
-            self._run_git("push", "-u", "origin", branch, check=False)
 
-            # 如果推送失败，尝试先拉取再推送
-            result = self._run_git("push", "origin", branch, capture=True, check=False)
-            if "failed" in result.lower() or "error" in result.lower():
-                self.progress.emit("正在拉取远程更改...")
-                self._run_git("pull", "--rebase", "origin", branch, check=False)
+            # 获取当前实际分支名，而非使用配置分支名
+            branch_result = self._run_git("rev-parse", "--abbrev-ref", "HEAD", capture=True)
+            current_branch = branch_result.strip() if branch_result.strip() else config.git_branch
+
+            # 尝试推送
+            push_result = subprocess.run(
+                ["git", "push", "-u", "origin", current_branch],
+                cwd=str(self.notebook_path),
+                capture_output=True,
+                text=True
+            )
+
+            if push_result.returncode != 0:
+                # 推送失败，尝试 pull --rebase 再推送
+                self.progress.emit("推送失败，尝试拉取远程更改...")
+
+                pull_result = subprocess.run(
+                    ["git", "pull", "--rebase", "origin", current_branch],
+                    cwd=str(self.notebook_path),
+                    capture_output=True,
+                    text=True
+                )
+
+                if pull_result.returncode != 0:
+                    self.error.emit(f"拉取失败: {pull_result.stderr.strip()}")
+                    return
+
+                # 重新推送
                 self.progress.emit("正在重新推送...")
-                self._run_git("push", "origin", branch)
+                retry_result = subprocess.run(
+                    ["git", "push", "-u", "origin", current_branch],
+                    cwd=str(self.notebook_path),
+                    capture_output=True,
+                    text=True
+                )
+
+                if retry_result.returncode != 0:
+                    self.error.emit(f"推送失败: {retry_result.stderr.strip()}")
+                    return
 
             self.success.emit("同步完成")
 
@@ -156,7 +235,44 @@ class GitSyncManager:
         if not config.git_enabled or not config.git_remote_url:
             return False
 
-        self._worker = GitSyncWorker(self.notebook_path)
+        self._worker = GitSyncWorker(self.notebook_path, pull_only=False)
+
+        if on_progress:
+            self._worker.progress.connect(on_progress)
+        if on_success:
+            self._worker.success.connect(on_success)
+        if on_error:
+            self._worker.error.connect(on_error)
+
+        self._worker.finished.connect(self._on_finished)
+        self._worker.start()
+
+        return True
+
+    def pull(
+        self,
+        on_progress: Any = None,
+        on_success: Any = None,
+        on_error: Any = None
+    ) -> bool:
+        """开始拉取（启动时自动拉取）
+
+        Args:
+            on_progress: 进度回调
+            on_success: 成功回调
+            on_error: 错误回调
+
+        Returns:
+            是否成功启动拉取
+        """
+        if self.is_syncing():
+            return False
+
+        config = get_config()
+        if not config.git_enabled or not config.git_remote_url:
+            return False
+
+        self._worker = GitSyncWorker(self.notebook_path, pull_only=True)
 
         if on_progress:
             self._worker.progress.connect(on_progress)

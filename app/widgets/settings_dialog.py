@@ -252,7 +252,7 @@ class SettingsDialog(QDialog):
         sync_group = QGroupBox("同步设置")
         sync_layout = QFormLayout(sync_group)
 
-        self.git_auto_sync_checkbox = QCheckBox("自动同步")
+        self.git_auto_sync_checkbox = QCheckBox("启动时自动拉取")
         sync_layout.addRow(self.git_auto_sync_checkbox)
 
         self.git_commit_msg_input = QLineEdit()

@@ -6,7 +6,7 @@
 from pathlib import Path
 from typing import Any
 
-from PySide6.QtCore import QSettings, Qt, Slot, QThread, Signal, QPoint
+from PySide6.QtCore import QSettings, Qt, Slot, QThread, Signal, QPoint, QTimer
 from PySide6.QtGui import QAction, QFont, QIcon, QKeySequence, QPixmap, QPainter, QPolygon, QBrush, QColor
 from PySide6.QtWidgets import (
     QApplication,
@@ -232,6 +232,11 @@ class MainWindow(QMainWindow):
         self._current_note: Note | None = None
         # 已保存的内容（用于检测未保存的更改）
         self._saved_content: str = ""
+
+        # 自动保存定时器（防抖）
+        self._save_timer = QTimer(self)
+        self._save_timer.setSingleShot(True)
+        self._save_timer.timeout.connect(self._on_save)
 
     def _init_folder_skill_updater(self) -> None:
         """初始化文件夹 SKILL 更新器"""
@@ -1196,10 +1201,12 @@ class MainWindow(QMainWindow):
 
     @Slot()
     def _on_content_changed(self) -> None:
-        """内容改变"""
+        """内容改变 - 使用定时器防抖保存"""
         config = get_config()
         if config.auto_save:
-            self._on_save()
+            # 重置定时器，实现防抖
+            interval = config.auto_save_interval * 1000  # 转换为毫秒
+            self._save_timer.start(interval)
 
     @Slot()
     def _on_generate_skill(self) -> None:
@@ -1240,6 +1247,30 @@ class MainWindow(QMainWindow):
         self.notification_bar.show_progress("正在同步笔记...")
 
         sync_manager.sync(
+            on_progress=lambda msg: self.notification_bar.show_progress(msg),
+            on_success=lambda msg: self.notification_bar.show_success(msg),
+            on_error=lambda msg: self.notification_bar.show_error(msg),
+        )
+
+    def _startup_git_pull(self) -> None:
+        """启动时自动拉取远程更改"""
+        config = get_config()
+
+        # 检查是否启用启动时自动拉取
+        if not config.git_enabled or not config.git_auto_sync:
+            return
+
+        if not config.git_remote_url:
+            return
+
+        from ..core.git_sync import get_git_sync_manager
+
+        sync_manager = get_git_sync_manager()
+
+        if sync_manager.is_syncing():
+            return
+
+        sync_manager.pull(
             on_progress=lambda msg: self.notification_bar.show_progress(msg),
             on_success=lambda msg: self.notification_bar.show_success(msg),
             on_error=lambda msg: self.notification_bar.show_error(msg),
@@ -1342,8 +1373,10 @@ class MainWindow(QMainWindow):
         self.settings.setValue("geometry", self.saveGeometry())
         self.settings.setValue("windowState", self.saveState())
 
-        # 保存当前笔记
+        # 保存当前笔记（如果定时器活跃，停止并立即保存）
         if self._current_note:
+            if self._save_timer.isActive():
+                self._save_timer.stop()
             self._on_save()
 
         # 停止 SkillGeneratorWorker 线程
@@ -1377,5 +1410,8 @@ def run_app() -> None:
 
     window = MainWindow()
     window.show()
+
+    # 启动后 500ms 执行自动拉取
+    QTimer.singleShot(500, window._startup_git_pull)
 
     sys.exit(app.exec())
