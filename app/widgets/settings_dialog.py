@@ -37,23 +37,26 @@ class NoBorderComboBox(QComboBox):
         """显示下拉列表时移除容器边框"""
         super().showPopup()
 
-        # 获取下拉列表容器窗口
-        popup = self.findChild(QWidget, "qt_combobox_popup")
-        if popup:
-            # 设置无边框窗口标志，移除 Windows 系统黑边
-            popup.setWindowFlags(
-                popup.windowFlags() |
-                Qt.WindowType.FramelessWindowHint |
-                Qt.WindowType.NoDropShadowWindowHint
-            )
-            popup.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, False)
+        # 获取 popup 容器窗口（QComboBoxPrivateContainer）
+        view = self.view()
+        if view:
+            container = view.window()  # QComboBoxPrivateContainer
+            if container:
+                # 设置无边框窗口标志
+                container.setWindowFlags(
+                    container.windowFlags() |
+                    Qt.WindowType.FramelessWindowHint |
+                    Qt.WindowType.NoDropShadowWindowHint
+                )
 
-        # 同时处理 QFrame 子控件
-        frames = self.findChildren(QFrame)
-        for frame in frames:
-            frame.setLineWidth(0)
-            frame.setMidLineWidth(0)
-            frame.setFrameShape(QFrame.Shape.NoFrame)
+                # 关键：移除容器的边距，让内容填满
+                container.setContentsMargins(0, 0, 0, 0)
+
+                # 设置内层 QListView 填满容器
+                view.setGeometry(0, 0, container.width(), container.height())
+
+                # 重新显示以应用 WindowFlags
+                container.show()
 
     def paintEvent(self, event):
         """自定义绘制事件，绘制下拉箭头"""
@@ -128,8 +131,8 @@ class SettingsDialog(QDialog):
             QComboBox QAbstractItemView {
                 background-color: #FFFEF9;
                 border: 2px solid #D4A574;
-                border-radius: 8px;
-                padding: 4px;
+                border-radius: 0px;
+                padding: 0px;
                 selection-background-color: #FDF6ED;
                 selection-color: #8B5A2B;
                 outline: none;
@@ -137,7 +140,7 @@ class SettingsDialog(QDialog):
             }
             QComboBox QAbstractItemView::item {
                 padding: 6px 10px;
-                border-radius: 4px;
+                border-radius: 0px;
                 color: #3D3428;
                 background: transparent;
             }
@@ -208,7 +211,6 @@ class SettingsDialog(QDialog):
             QListView::item {
                 padding: 6px 10px;
                 min-height: 20px;
-                border-radius: 4px;
                 background-color: #FFFEF9;
             }
             QListView::item:hover {
@@ -251,7 +253,6 @@ class SettingsDialog(QDialog):
             QListView::item {
                 padding: 6px 10px;
                 min-height: 20px;
-                border-radius: 4px;
                 background-color: #FFFEF9;
             }
             QListView::item:hover {

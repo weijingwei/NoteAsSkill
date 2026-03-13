@@ -649,8 +649,8 @@ class MainWindow(QMainWindow):
             QComboBox QAbstractItemView {
                 background-color: #FFFEF9;
                 border: 2px solid #D4A574;
-                border-radius: 8px;
-                padding: 4px;
+                border-radius: 0px;
+                padding: 0px;
                 selection-background-color: #FDF6ED;
                 selection-color: #8B5A2B;
                 outline: none;
@@ -658,7 +658,6 @@ class MainWindow(QMainWindow):
             }
             QComboBox QAbstractItemView::item {
                 padding: 6px 10px;
-                border-radius: 4px;
                 color: #3D3428;
                 background: transparent;
             }
