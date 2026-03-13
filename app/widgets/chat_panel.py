@@ -6,7 +6,8 @@
 
 from typing import Any
 
-from PySide6.QtCore import Qt, QThread, Signal, Slot
+from PySide6.QtCore import Qt, QThread, Signal, Slot, QPoint
+from PySide6.QtGui import QPainter, QPainterPath, QColor, QPen
 from PySide6.QtWidgets import (
     QComboBox,
     QFrame,
@@ -28,14 +29,60 @@ from ..core.config import get_config
 class NoBorderComboBox(QComboBox):
     """无边框下拉框 - 解决 Windows 平台下拉列表黑边问题"""
 
+    def __init__(self, parent=None):
+        super().__init__(parent)
+
     def showPopup(self) -> None:
         """显示下拉列表时移除容器边框"""
         super().showPopup()
-        # 查找下拉框容器并移除边框
-        popup = self.findChild(QFrame)
+
+        # 获取下拉列表容器窗口
+        popup = self.findChild(QWidget, "qt_combobox_popup")
         if popup:
-            popup.setLineWidth(0)
-            popup.setFrameShape(QFrame.Shape.NoFrame)
+            # 设置无边框窗口标志，移除 Windows 系统黑边
+            popup.setWindowFlags(
+                popup.windowFlags() |
+                Qt.WindowType.FramelessWindowHint |
+                Qt.WindowType.NoDropShadowWindowHint
+            )
+            popup.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, False)
+
+        # 同时处理 QFrame 子控件
+        frames = self.findChildren(QFrame)
+        for frame in frames:
+            frame.setLineWidth(0)
+            frame.setMidLineWidth(0)
+            frame.setFrameShape(QFrame.Shape.NoFrame)
+
+    def paintEvent(self, event):
+        """自定义绘制事件，绘制下拉箭头"""
+        super().paintEvent(event)
+
+        # 绘制下拉箭头
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        # 计算箭头位置（右侧区域）
+        arrow_x = self.width() - 14
+        arrow_y = self.height() // 2
+        arrow_size = 5
+
+        # 设置颜色
+        color = QColor(0x4A, 0x3F, 0x35)  # #4A3F35
+        painter.setPen(QPen(color, 2))
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+
+        # 绘制 V 形箭头
+        points = [
+            QPoint(arrow_x - arrow_size, arrow_y - 2),
+            QPoint(arrow_x, arrow_y + 3),
+            QPoint(arrow_x + arrow_size, arrow_y - 2),
+        ]
+        path = QPainterPath()
+        path.moveTo(points[0])
+        path.lineTo(points[1])
+        path.lineTo(points[2])
+        painter.drawPath(path)
 
 
 class StreamChatWorker(QThread):
@@ -140,6 +187,7 @@ class ChatPanel(QWidget):
                 border: 1px solid #E8DFD5;
                 border-radius: 0;
                 padding: 2px 6px;
+                padding-right: 18px;
                 color: #4A3F35;
                 min-width: 100px;
             }
@@ -149,11 +197,6 @@ class ChatPanel(QWidget):
             QComboBox::drop-down {
                 border: none;
                 width: 18px;
-            }
-            QComboBox::down-arrow {
-                image: url(assets/dropdown-arrow.svg);
-                width: 14px;
-                height: 14px;
             }
             QComboBox QAbstractItemView {
                 background-color: #FFFEF9;

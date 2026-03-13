@@ -3,7 +3,8 @@
 提供 AI 配置、界面偏好设置和 Git 同步配置界面。
 """
 
-from PySide6.QtCore import Slot
+from PySide6.QtCore import Slot, Qt, QPoint
+from PySide6.QtGui import QPainter, QPainterPath, QColor, QPen
 from PySide6.QtWidgets import (
     QButtonGroup,
     QCheckBox,
@@ -27,16 +28,62 @@ from ..core.config import get_config
 
 
 class NoBorderComboBox(QComboBox):
-    """无边框下拉框 - 解决 Windows 平台下拉列表黑边问题"""
+    """无边框下拉框 - 解决 Windows 平台下拉列表黑边问题，使用 QPainter 绘制下拉箭头"""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
 
     def showPopup(self) -> None:
         """显示下拉列表时移除容器边框"""
         super().showPopup()
-        # 查找下拉框容器并移除边框
-        popup = self.findChild(QFrame)
+
+        # 获取下拉列表容器窗口
+        popup = self.findChild(QWidget, "qt_combobox_popup")
         if popup:
-            popup.setLineWidth(0)
-            popup.setFrameShape(QFrame.Shape.NoFrame)
+            # 设置无边框窗口标志，移除 Windows 系统黑边
+            popup.setWindowFlags(
+                popup.windowFlags() |
+                Qt.WindowType.FramelessWindowHint |
+                Qt.WindowType.NoDropShadowWindowHint
+            )
+            popup.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, False)
+
+        # 同时处理 QFrame 子控件
+        frames = self.findChildren(QFrame)
+        for frame in frames:
+            frame.setLineWidth(0)
+            frame.setMidLineWidth(0)
+            frame.setFrameShape(QFrame.Shape.NoFrame)
+
+    def paintEvent(self, event):
+        """自定义绘制事件，绘制下拉箭头"""
+        super().paintEvent(event)
+
+        # 绘制下拉箭头
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        # 计算箭头位置（右侧区域）
+        arrow_x = self.width() - 20
+        arrow_y = self.height() // 2
+        arrow_size = 6
+
+        # 设置颜色
+        color = QColor(0x8B, 0x5A, 0x2B)  # #8B5A2B
+        painter.setPen(QPen(color, 2))
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+
+        # 绘制 V 形箭头
+        points = [
+            QPoint(arrow_x - arrow_size, arrow_y - 2),
+            QPoint(arrow_x, arrow_y + 4),
+            QPoint(arrow_x + arrow_size, arrow_y - 2),
+        ]
+        path = QPainterPath()
+        path.moveTo(points[0])
+        path.lineTo(points[1])
+        path.lineTo(points[2])
+        painter.drawPath(path)
 
 
 class SettingsDialog(QDialog):
@@ -48,7 +95,7 @@ class SettingsDialog(QDialog):
         self.setWindowTitle("设置")
         self.setMinimumSize(500, 450)
 
-        # 设置对话框样式 - 确保下拉框样式正确应用
+        # 设置对话框样式
         self.setStyleSheet("""
             QDialog {
                 background-color: #FBF7F2;
@@ -77,11 +124,6 @@ class SettingsDialog(QDialog):
                 width: 24px;
                 subcontrol-position: center right;
                 background: transparent;
-            }
-            QComboBox::down-arrow {
-                image: url(assets/dropdown-arrow.svg);
-                width: 16px;
-                height: 16px;
             }
             QComboBox QAbstractItemView {
                 background-color: #FFFEF9;
@@ -165,8 +207,9 @@ class SettingsDialog(QDialog):
             }
             QListView::item {
                 padding: 6px 10px;
+                min-height: 20px;
                 border-radius: 4px;
-                background-color: transparent;
+                background-color: #FFFEF9;
             }
             QListView::item:hover {
                 background-color: #FDF8F0;
@@ -177,7 +220,6 @@ class SettingsDialog(QDialog):
             }
         """)
         self.provider_combo.setView(provider_view)
-        self.provider_combo.addItems(["openai", "anthropic", "ollama"])
         self.provider_combo.currentTextChanged.connect(self._on_provider_changed)
         provider_layout.addWidget(self.provider_combo)
 
@@ -208,8 +250,9 @@ class SettingsDialog(QDialog):
             }
             QListView::item {
                 padding: 6px 10px;
+                min-height: 20px;
                 border-radius: 4px;
-                background-color: transparent;
+                background-color: #FFFEF9;
             }
             QListView::item:hover {
                 background-color: #FDF8F0;
@@ -333,6 +376,7 @@ class SettingsDialog(QDialog):
         config = get_config()
 
         # AI 设置
+        self.provider_combo.addItems(["openai", "anthropic", "ollama"])
         self.provider_combo.setCurrentText(config.ai_provider)
 
         ai_config = config.get_ai_config()

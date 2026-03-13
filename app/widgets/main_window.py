@@ -646,11 +646,6 @@ class MainWindow(QMainWindow):
                 subcontrol-position: center right;
                 background: transparent;
             }
-            QComboBox::down-arrow {
-                image: url(assets/dropdown-arrow.svg);
-                width: 16px;
-                height: 16px;
-            }
             QComboBox QAbstractItemView {
                 background-color: #FFFEF9;
                 border: 2px solid #D4A574;
