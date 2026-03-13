@@ -63,8 +63,14 @@ class SettingsDialog(QDialog):
                 color: #3D3428;
                 min-width: 80px;
             }
+            QComboBox:focus {
+                border-color: #D4A574;
+            }
             QComboBox:hover {
                 border-color: #D4C4B0;
+            }
+            QComboBox:on {
+                border-color: #D4A574;
             }
             QComboBox::drop-down {
                 border: none;
@@ -85,11 +91,13 @@ class SettingsDialog(QDialog):
                 selection-background-color: #FDF6ED;
                 selection-color: #8B5A2B;
                 outline: none;
+                background: #FFFEF9;
             }
             QComboBox QAbstractItemView::item {
                 padding: 6px 10px;
-                min-height: 24px;
+                border-radius: 4px;
                 color: #3D3428;
+                background: transparent;
             }
             QComboBox QAbstractItemView::item:hover {
                 background-color: #FDF8F0;
@@ -146,6 +154,29 @@ class SettingsDialog(QDialog):
         provider_layout = QVBoxLayout(provider_group)
 
         self.provider_combo = NoBorderComboBox()
+        # 创建 QListView 并直接设置样式（Windows 平台需要）
+        provider_view = QListView()
+        provider_view.setStyleSheet("""
+            QListView {
+                background-color: #FFFEF9;
+                border: none;
+                padding: 0px;
+                outline: none;
+            }
+            QListView::item {
+                padding: 6px 10px;
+                border-radius: 4px;
+                background-color: transparent;
+            }
+            QListView::item:hover {
+                background-color: #FDF8F0;
+            }
+            QListView::item:selected {
+                background-color: #FDF6ED;
+                color: #8B5A2B;
+            }
+        """)
+        self.provider_combo.setView(provider_view)
         self.provider_combo.addItems(["openai", "anthropic", "ollama"])
         self.provider_combo.currentTextChanged.connect(self._on_provider_changed)
         provider_layout.addWidget(self.provider_combo)
@@ -166,6 +197,29 @@ class SettingsDialog(QDialog):
         api_layout.addRow("API Key:", self.api_key_input)
 
         self.model_combo = NoBorderComboBox()
+        # 创建 QListView 并直接设置样式（Windows 平台需要）
+        model_view = QListView()
+        model_view.setStyleSheet("""
+            QListView {
+                background-color: #FFFEF9;
+                border: none;
+                padding: 0px;
+                outline: none;
+            }
+            QListView::item {
+                padding: 6px 10px;
+                border-radius: 4px;
+                background-color: transparent;
+            }
+            QListView::item:hover {
+                background-color: #FDF8F0;
+            }
+            QListView::item:selected {
+                background-color: #FDF6ED;
+                color: #8B5A2B;
+            }
+        """)
+        self.model_combo.setView(model_view)
         self.model_combo.setEditable(True)
         api_layout.addRow("模型:", self.model_combo)
 
