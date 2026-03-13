@@ -151,11 +151,9 @@ class ChatPanel(QWidget):
                 width: 18px;
             }
             QComboBox::down-arrow {
-                image: none;
-                border-left: 4px solid transparent;
-                border-right: 4px solid transparent;
-                border-top: 5px solid #8B5A2B;
-                margin-right: 4px;
+                image: url(assets/dropdown-arrow.svg);
+                width: 14px;
+                height: 14px;
             }
             QComboBox QAbstractItemView {
                 background-color: #FFFEF9;

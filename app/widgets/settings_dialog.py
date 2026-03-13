@@ -48,6 +48,58 @@ class SettingsDialog(QDialog):
         self.setWindowTitle("设置")
         self.setMinimumSize(500, 450)
 
+        # 设置对话框样式 - 确保下拉框样式正确应用
+        self.setStyleSheet("""
+            QDialog {
+                background-color: #FBF7F2;
+            }
+            QComboBox {
+                background-color: #FFFEF9;
+                border: 2px solid #E8DFD5;
+                border-radius: 8px;
+                padding: 6px 12px;
+                padding-right: 28px;
+                font-size: 13px;
+                color: #3D3428;
+                min-width: 80px;
+            }
+            QComboBox:hover {
+                border-color: #D4C4B0;
+            }
+            QComboBox::drop-down {
+                border: none;
+                width: 24px;
+                subcontrol-position: center right;
+                background: transparent;
+            }
+            QComboBox::down-arrow {
+                image: url(assets/dropdown-arrow.svg);
+                width: 16px;
+                height: 16px;
+            }
+            QComboBox QAbstractItemView {
+                background-color: #FFFEF9;
+                border: 2px solid #D4A574;
+                border-radius: 8px;
+                padding: 4px;
+                selection-background-color: #FDF6ED;
+                selection-color: #8B5A2B;
+                outline: none;
+            }
+            QComboBox QAbstractItemView::item {
+                padding: 6px 10px;
+                min-height: 24px;
+                color: #3D3428;
+            }
+            QComboBox QAbstractItemView::item:hover {
+                background-color: #FDF8F0;
+            }
+            QComboBox QAbstractItemView::item:selected {
+                background-color: #FDF6ED;
+                color: #8B5A2B;
+            }
+        """)
+
         self._init_ui()
         self._load_settings()
 
@@ -94,31 +146,6 @@ class SettingsDialog(QDialog):
         provider_layout = QVBoxLayout(provider_group)
 
         self.provider_combo = NoBorderComboBox()
-        # 创建 QListView 并直接设置样式（Windows 平台需要）
-        provider_view = QListView()
-        provider_view.setStyleSheet("""
-            QListView {
-                background-color: #FFFEF9;
-                border: 1px solid #E8DFD5;
-                border-radius: 0;
-                padding: 4px;
-                outline: none;
-            }
-            QListView::item {
-                padding: 4px 8px;
-                min-height: 24px;
-                background-color: #FFFEF9;
-                border-radius: 0;
-            }
-            QListView::item:hover {
-                background-color: #FDF8F0;
-            }
-            QListView::item:selected {
-                background-color: #FDF6ED;
-                color: #8B5A2B;
-            }
-        """)
-        self.provider_combo.setView(provider_view)
         self.provider_combo.addItems(["openai", "anthropic", "ollama"])
         self.provider_combo.currentTextChanged.connect(self._on_provider_changed)
         provider_layout.addWidget(self.provider_combo)
@@ -139,31 +166,6 @@ class SettingsDialog(QDialog):
         api_layout.addRow("API Key:", self.api_key_input)
 
         self.model_combo = NoBorderComboBox()
-        # 创建 QListView 并直接设置样式（Windows 平台需要）
-        model_view = QListView()
-        model_view.setStyleSheet("""
-            QListView {
-                background-color: #FFFEF9;
-                border: 1px solid #E8DFD5;
-                border-radius: 0;
-                padding: 4px;
-                outline: none;
-            }
-            QListView::item {
-                padding: 4px 8px;
-                min-height: 24px;
-                background-color: #FFFEF9;
-                border-radius: 0;
-            }
-            QListView::item:hover {
-                background-color: #FDF8F0;
-            }
-            QListView::item:selected {
-                background-color: #FDF6ED;
-                color: #8B5A2B;
-            }
-        """)
-        self.model_combo.setView(model_view)
         self.model_combo.setEditable(True)
         api_layout.addRow("模型:", self.model_combo)
 
@@ -175,6 +177,8 @@ class SettingsDialog(QDialog):
             "anthropic": ["claude-3-opus-20240229", "claude-3-sonnet-20240229", "claude-3-haiku-20240307"],
             "ollama": ["llama2", "llama3", "mistral", "codellama"],
         }
+
+        layout.addStretch()
 
         return widget
 

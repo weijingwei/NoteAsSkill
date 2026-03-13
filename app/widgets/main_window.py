@@ -647,11 +647,9 @@ class MainWindow(QMainWindow):
                 background: transparent;
             }
             QComboBox::down-arrow {
-                image: none;
-                border-left: 5px solid transparent;
-                border-right: 5px solid transparent;
-                border-top: 6px solid #8B5A2B;
-                margin-right: 8px;
+                image: url(assets/dropdown-arrow.svg);
+                width: 16px;
+                height: 16px;
             }
             QComboBox QAbstractItemView {
                 background-color: #FFFEF9;
