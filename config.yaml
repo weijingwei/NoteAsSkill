@@ -1,0 +1,75 @@
+# NoteAsSkill 系统配置文件
+# 此文件包含应用级别的配置，用户配置存储在 notebook/.config.yaml
+
+version: "v0.2.71"
+
+app:
+  name: "NoteAsSkill"
+  debug: false
+
+ui:
+  window:
+    min_width: 1200
+    min_height: 800
+    sidebar_width: 280
+  colors:
+    primary: "#D4A574"
+    primary_hover: "#C49564"
+    primary_pressed: "#B48554"
+    background: "#FFFEF9"
+    background_alt: "#FBF7F2"
+    border: "#E8DFD5"
+    border_focus: "#D4A574"
+    text: "#3D3428"
+    text_secondary: "#5A4A3A"
+    text_muted: "#8B7B6B"
+    accent: "#8B5A2B"
+    success: "#2E7D32"
+    success_bg: "#E8F5E9"
+    error: "#C0392B"
+    error_bg: "#FDECEA"
+    warning: "#D4A574"
+  fonts:
+    size_small: 11
+    size_normal: 12
+    size_medium: 13
+    size_large: 14
+    size_title: 16
+  buttons:
+    icon_size: 24
+    icon_size_small: 20
+    border_radius: 8
+
+timeouts:
+  mcp_connection: 15
+  mcp_shutdown: 5
+  mcp_process_wait: 2
+  api_request: 120
+  api_stream: 300
+  api_list_models: 10
+  auto_save_interval: 30
+  folder_skill_update_delay: 30
+
+api:
+  openai:
+    base_url: "https://api.openai.com/v1"
+    default_model: "gpt-4"
+  anthropic:
+    base_url: "https://api.anthropic.com"
+    default_model: "claude-3-opus-20240229"
+  ollama:
+    base_url: "http://localhost:11434"
+    default_model: "llama2"
+
+editor:
+  default_font_size: 14
+  preview_mode: "split"
+  auto_save: true
+  auto_generate_skill: true
+
+git:
+  default_branch: "main"
+  default_commit_message: "更新笔记"
+
+mcp:
+  default_timeout: 10

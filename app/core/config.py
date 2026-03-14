@@ -9,6 +9,29 @@ from typing import Any
 import yaml
 
 
+def get_system_config() -> dict[str, Any]:
+    """获取系统配置（从项目根目录 config.yaml）
+
+    Returns:
+        系统配置字典
+    """
+    config_path = Path(__file__).parent.parent.parent / "config.yaml"
+    if config_path.exists():
+        with open(config_path, "r", encoding="utf-8") as f:
+            return yaml.safe_load(f) or {}
+    return {}
+
+
+def get_version() -> str:
+    """获取应用版本号
+
+    Returns:
+        版本号字符串，如 "v0.2.71"
+    """
+    system_config = get_system_config()
+    return system_config.get("version", "v0.0.0")
+
+
 class Config:
     """应用配置管理类"""
 
@@ -347,18 +370,6 @@ class Config:
 
 # 全局配置实例
 _config: Config | None = None
-
-
-def get_version() -> str:
-    """获取应用版本号
-
-    Returns:
-        版本号字符串，如 "v0.2.5"
-    """
-    version_path = Path(__file__).parent.parent.parent / "version.txt"
-    if version_path.exists():
-        return version_path.read_text(encoding="utf-8").strip()
-    return "v0.0.0"
 
 
 def get_config() -> Config:

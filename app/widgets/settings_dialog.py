@@ -37,6 +37,7 @@ from PySide6.QtWidgets import (
 )
 
 from ..core.config import get_config
+from ..core.system_config import get_system_config_instance
 from ..mcp.client import validate_mcp_server_config, test_mcp_server_connection, parse_mcp_config
 
 
@@ -140,9 +141,13 @@ class MCPServerTestWorker(QThread):
     def __init__(self, config: dict, parent=None):
         super().__init__(parent)
         self.config = config
+        self._sys_config = get_system_config_instance()
 
     def run(self) -> None:
-        success, message, tools = test_mcp_server_connection(self.config, timeout=15)
+        success, message, tools = test_mcp_server_connection(
+            self.config, 
+            timeout=self._sys_config.mcp_connection_timeout
+        )
         self.finished.emit(success, message, tools)
 
 

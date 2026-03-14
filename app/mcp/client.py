@@ -7,6 +7,8 @@ import json
 import subprocess
 from typing import Any
 
+from app.core.system_config import get_system_config_instance
+
 from .manager import MCPServer, MCPTool
 
 
@@ -180,16 +182,19 @@ def validate_mcp_server_config(config: dict) -> tuple[bool, str]:
     return True, ""
 
 
-def test_mcp_server_connection(config: dict, timeout: int = 10) -> tuple[bool, str, list[str]]:
+def test_mcp_server_connection(config: dict, timeout: int = None) -> tuple[bool, str, list[str]]:
     """测试 MCP 服务器连接
 
     Args:
         config: 服务器配置
-        timeout: 超时时间（秒）
+        timeout: 超时时间（秒），默认从系统配置读取
 
     Returns:
         (是否成功, 消息, 发现的工具列表)
     """
+    if timeout is None:
+        timeout = get_system_config_instance().mcp_default_timeout
+
     is_valid, error = validate_mcp_server_config(config)
     if not is_valid:
         return False, f"配置验证失败: {error}", []

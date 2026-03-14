@@ -5,6 +5,8 @@ from typing import Any, Iterator
 
 import requests
 
+from app.core.system_config import get_system_config_instance
+
 from .client import AIClient
 
 
@@ -18,6 +20,7 @@ class OllamaClient(AIClient):
         api_key: str = "",  # Ollama 不需要 API key，保留参数以统一接口
     ):
         super().__init__(api_key, base_url, model)
+        self._sys_config = get_system_config_instance()
 
     def validate_config(self) -> bool:
         """验证配置是否有效"""
@@ -46,7 +49,7 @@ class OllamaClient(AIClient):
             },
         }
 
-        response = requests.post(url, json=payload, timeout=120)
+        response = requests.post(url, json=payload, timeout=self._sys_config.api_request_timeout)
         response.raise_for_status()
 
         data = response.json()
@@ -70,7 +73,7 @@ class OllamaClient(AIClient):
             },
         }
 
-        response = requests.post(url, json=payload, stream=True, timeout=120)
+        response = requests.post(url, json=payload, stream=True, timeout=self._sys_config.api_stream_timeout)
         response.raise_for_status()
 
         for line in response.iter_lines():
@@ -86,7 +89,7 @@ class OllamaClient(AIClient):
         url = self._get_api_url("tags")
 
         try:
-            response = requests.get(url, timeout=10)
+            response = requests.get(url, timeout=self._sys_config.timeout("api_list_models", 10))
             response.raise_for_status()
             data = response.json()
             return [model["name"] for model in data.get("models", [])]
@@ -101,7 +104,7 @@ class OllamaClient(AIClient):
             response = requests.post(
                 url,
                 json={"name": model_name, "stream": False},
-                timeout=300,
+                timeout=self._sys_config.api_stream_timeout,
             )
             response.raise_for_status()
             return True

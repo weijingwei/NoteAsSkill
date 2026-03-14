@@ -25,6 +25,7 @@ from PySide6.QtWidgets import (
 )
 
 from ..core.config import get_config, get_version
+from ..core.system_config import get_system_config_instance
 from ..core.note_manager import Note, get_note_manager
 from ..core.folder_skill_updater import get_folder_skill_updater
 from .chat_panel import ChatPanel
@@ -211,8 +212,13 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
 
+        self._sys_config = get_system_config_instance()
+
         self.setWindowTitle("NoteAsSkill - 笔技")
-        self.setMinimumSize(1200, 800)
+        self.setMinimumSize(
+            self._sys_config.min_window_width,
+            self._sys_config.min_window_height
+        )
         self.setMouseTracking(True)  # 启用鼠标追踪，用于边缘检测
 
         # 加载设置
