@@ -53,6 +53,10 @@ class Config:
             "auto_sync": False,                 # 是否自动同步
             "commit_message": "更新笔记",        # 默认提交信息
         },
+        "mcp": {
+            "enabled": False,                   # 是否启用 MCP
+            "servers": {},                      # MCP 服务器配置
+        },
     }
 
     def __init__(self, config_path: Path | None = None):
@@ -299,6 +303,46 @@ class Config:
     @git_commit_message.setter
     def git_commit_message(self, value: str) -> None:
         self.set("git.commit_message", value)
+
+    # ==================== MCP 配置 ====================
+
+    @property
+    def mcp_enabled(self) -> bool:
+        """是否启用 MCP"""
+        return self.get("mcp.enabled", False)
+
+    @mcp_enabled.setter
+    def mcp_enabled(self, value: bool) -> None:
+        self.set("mcp.enabled", value)
+
+    @property
+    def mcp_servers(self) -> dict[str, dict]:
+        """MCP 服务器配置"""
+        return self.get("mcp.servers", {})
+
+    @mcp_servers.setter
+    def mcp_servers(self, value: dict[str, dict]) -> None:
+        self.set("mcp.servers", value)
+
+    def get_mcp_server(self, name: str) -> dict | None:
+        """获取指定 MCP 服务器配置"""
+        servers = self.mcp_servers
+        return servers.get(name)
+
+    def set_mcp_server(self, name: str, config: dict) -> None:
+        """设置 MCP 服务器配置"""
+        servers = self.mcp_servers.copy()
+        servers[name] = config
+        self.mcp_servers = servers
+
+    def remove_mcp_server(self, name: str) -> bool:
+        """删除 MCP 服务器配置"""
+        servers = self.mcp_servers
+        if name in servers:
+            del servers[name]
+            self.mcp_servers = servers
+            return True
+        return False
 
 
 # 全局配置实例

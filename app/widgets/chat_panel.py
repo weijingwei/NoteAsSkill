@@ -4,10 +4,11 @@
 支持流式输出和思考状态显示。
 """
 
+from pathlib import Path
 from typing import Any
 
 from PySide6.QtCore import Qt, QThread, Signal, Slot, QPoint
-from PySide6.QtGui import QPainter, QPainterPath, QColor, QPen
+from PySide6.QtGui import QPainter, QPainterPath, QColor, QPen, QIcon
 from PySide6.QtWidgets import (
     QComboBox,
     QFrame,
@@ -239,10 +240,16 @@ class ChatPanel(QWidget):
         # 按钮区域
         button_layout = QHBoxLayout()
 
-        self.send_button = QPushButton("发送")
+        self.send_button = QPushButton(" 发送")
+        send_icon_path = Path(__file__).parent.parent.parent / "assets" / "send.svg"
+        if send_icon_path.exists():
+            self.send_button.setIcon(QIcon(str(send_icon_path)))
         button_layout.addWidget(self.send_button)
 
-        self.clear_button = QPushButton("清空")
+        self.clear_button = QPushButton(" 清空")
+        clear_icon_path = Path(__file__).parent.parent.parent / "assets" / "clear.svg"
+        if clear_icon_path.exists():
+            self.clear_button.setIcon(QIcon(str(clear_icon_path)))
         button_layout.addWidget(self.clear_button)
 
         layout.addLayout(button_layout)

@@ -123,11 +123,15 @@ def create_arrow_icon(direction: str, size: int = 16, color: str = "#4A3F35") ->
     Args:
         direction: "right" 或 "left"
         size: 图标尺寸
-        color: 箭头颜色
+        color: 箭头颜色（仅用于回退）
 
     Returns:
         QIcon 对象
     """
+    icon_path = Path(__file__).parent.parent.parent / "assets" / f"arrow-{direction}.svg"
+    if icon_path.exists():
+        return QIcon(str(icon_path))
+
     pixmap = QPixmap(size, size)
     pixmap.fill(Qt.GlobalColor.transparent)
 
@@ -141,14 +145,12 @@ def create_arrow_icon(direction: str, size: int = 16, color: str = "#4A3F35") ->
     arrow_height = size - margin * 2
 
     if direction == "right":
-        # 右箭头 >
         points = [
             QPoint(margin, margin),
             QPoint(margin + arrow_width, size // 2),
             QPoint(margin, size - margin),
         ]
     else:
-        # 左箭头 <
         points = [
             QPoint(margin + arrow_width, margin),
             QPoint(margin, size // 2),
@@ -350,23 +352,27 @@ class MainWindow(QMainWindow):
         self.sidebar_toolbar.addAction(self.toggle_sidebar_btn)
 
         # 添加工具栏按钮
-        new_action = QAction("新建", self)
+        new_icon_path = Path(__file__).parent.parent.parent / "assets" / "new-note.svg"
+        new_action = QAction(QIcon(str(new_icon_path)) if new_icon_path.exists() else QIcon(), "新建", self)
         new_action.setToolTip("新建笔记")
         new_action.triggered.connect(self._on_new_note)
         self.sidebar_toolbar.addAction(new_action)
 
-        save_action = QAction("保存", self)
+        save_icon_path = Path(__file__).parent.parent.parent / "assets" / "save.svg"
+        save_action = QAction(QIcon(str(save_icon_path)) if save_icon_path.exists() else QIcon(), "保存", self)
         save_action.setToolTip("保存当前笔记")
         save_action.triggered.connect(self._on_save)
         self.sidebar_toolbar.addAction(save_action)
 
-        delete_action = QAction("删除", self)
+        delete_icon_path = Path(__file__).parent.parent.parent / "assets" / "delete.svg"
+        delete_action = QAction(QIcon(str(delete_icon_path)) if delete_icon_path.exists() else QIcon(), "删除", self)
         delete_action.setToolTip("删除当前笔记")
         delete_action.triggered.connect(self._on_delete_note)
         self.sidebar_toolbar.addAction(delete_action)
 
         # 同步按钮
-        sync_action = QAction("同步", self)
+        sync_icon_path = Path(__file__).parent.parent.parent / "assets" / "sync.svg"
+        sync_action = QAction(QIcon(str(sync_icon_path)) if sync_icon_path.exists() else QIcon(), "同步", self)
         sync_action.setToolTip("同步笔记到 Git 仓库")
         sync_action.triggered.connect(self._on_git_sync)
         self.sidebar_toolbar.addAction(sync_action)

@@ -5,10 +5,11 @@
 支持拖拽笔记到文件夹。
 """
 
+from pathlib import Path
 from typing import Any
 
 from PySide6.QtCore import Qt, Signal, Slot, QMimeData, QPoint, QRect
-from PySide6.QtGui import QAction, QDrag, QPainter, QColor, QFont, QPolygon
+from PySide6.QtGui import QAction, QDrag, QPainter, QColor, QFont, QPolygon, QIcon
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QInputDialog,
@@ -213,29 +214,27 @@ class Sidebar(QWidget):
         folder_header.addWidget(folder_label)
         folder_header.addStretch()
 
-        self.new_folder_btn = QPushButton("+ 新建")
+        self.new_folder_btn = QPushButton()
         self.new_folder_btn.setToolTip("新建文件夹")
-        self.new_folder_btn.setMinimumWidth(60)
+        self.new_folder_btn.setFixedSize(28, 28)
+        self.new_folder_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.new_folder_btn.setStyleSheet("""
             QPushButton {
                 background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
                     stop:0 #D4A574, stop:1 #C49564);
-                color: #FFFEF9;
                 border: none;
-                border-radius: 8px;
-                padding: 6px 12px;
-                font-size: 13px;
-                font-weight: 600;
+                border-radius: 6px;
+                padding: 2px;
             }
             QPushButton:hover {
                 background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
                     stop:0 #C49564, stop:1 #B48554);
             }
-            QPushButton:pressed {
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                    stop:0 #B48554, stop:1 #A47544);
-            }
         """)
+        add_icon_path = Path(__file__).parent.parent.parent / "assets" / "add.svg"
+        if add_icon_path.exists():
+            self.new_folder_btn.setIcon(QIcon(str(add_icon_path)))
+            self.new_folder_btn.setIconSize(self.new_folder_btn.size())
         folder_header.addWidget(self.new_folder_btn)
         layout.addLayout(folder_header)
 
@@ -302,8 +301,8 @@ class Sidebar(QWidget):
         layout.addWidget(self.tag_list)
 
         # 新建笔记按钮
-        self.new_button = QPushButton("新建笔记")
-        # 直接设置按钮样式，确保继承全局样式
+        self.new_button = QPushButton(" 新建笔记")
+        self.new_button.setCursor(Qt.CursorShape.PointingHandCursor)
         self.new_button.setStyleSheet("""
             QPushButton {
                 background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
@@ -324,6 +323,9 @@ class Sidebar(QWidget):
                     stop:0 #B48554, stop:1 #A47544);
             }
         """)
+        add_icon_path = Path(__file__).parent.parent.parent / "assets" / "add.svg"
+        if add_icon_path.exists():
+            self.new_button.setIcon(QIcon(str(add_icon_path)))
         layout.addWidget(self.new_button)
 
     def _connect_signals(self) -> None:

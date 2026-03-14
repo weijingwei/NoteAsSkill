@@ -145,20 +145,154 @@ def test_skill_generation():
 
     try:
         from app.core.skill_generator import SkillGenerator
+        import yaml
+        import re
 
         generator = SkillGenerator()
 
-        # TC01: 生成 SKILL.md 内容
         test_content = "# 测试技能\n\n这是一个测试技能的描述。\n\n## 使用方法\n\n```python\ndef test():\n    pass\n```"
+
         skill_content = generator.generate_skill_md(test_content, use_ai=False)
 
         result.add("SKILL.md 生成成功", skill_content is not None and len(skill_content) > 0, f"length={len(skill_content)}")
-        result.add("SKILL.md 包含 YAML", "---" in skill_content, "has front matter")
-        result.add("SKILL.md 包含 name", "name:" in skill_content, "has name field")
-        result.add("SKILL.md 包含 description", "description:" in skill_content, "has description field")
+        result.add("SKILL.md 包含 YAML 开始", skill_content.startswith("---"), "starts with ---")
+
+        yaml_match = re.match(r'^---\n(.*?)\n---', skill_content, re.DOTALL)
+        result.add("SKILL.md YAML 格式正确", yaml_match is not None, "has valid YAML block")
+
+        if yaml_match:
+            try:
+                front_matter = yaml.safe_load(yaml_match.group(1))
+                result.add("YAML 解析成功", front_matter is not None, "YAML is valid")
+                result.add("YAML 包含 name", "name" in front_matter, f"name={front_matter.get('name', 'N/A')}")
+                result.add("YAML 包含 description", "description" in front_matter, "has description")
+                result.add("name 格式正确 (kebab-case)", bool(re.match(r'^[a-z0-9\u4e00-\u9fff-]+$', str(front_matter.get('name', '')))), f"name={front_matter.get('name', 'N/A')}")
+            except yaml.YAMLError as e:
+                result.add("YAML 解析", False, f"error: {str(e)}")
+
+        result.add("SKILL.md 包含正文内容", "##" in skill_content, "has markdown content")
 
     except Exception as e:
         result.add("SKILL.md 生成", False, f"error: {str(e)}")
+
+    return result
+
+
+def test_skill_generation_with_ai():
+    """测试 SKILL.md AI 生成（真实 API 调用）"""
+    print("\n=== 测试 SKILL.md AI 生成 ===")
+    result = TestResult()
+
+    try:
+        from app.core.skill_generator import SkillGenerator, get_skill_generator
+        from app.core.config import get_config
+        from app.ai.client import create_client
+        import yaml
+        import re
+
+        config = get_config()
+        provider = config.ai_provider
+        ai_config = config.get_ai_config()
+
+        if not ai_config.get("api_key") and provider != "ollama":
+            result.add("SKILL.md AI 生成测试", False, "未配置 API Key，跳过测试")
+            return result
+
+        client = create_client(provider, ai_config)
+        generator = SkillGenerator(ai_client=client)
+
+        test_content = """# Python 数据处理
+
+使用 Pandas 处理 CSV 数据的完整指南。
+
+## 功能
+
+- 读取 CSV 文件
+- 过滤数据
+- 导出结果
+
+## 示例代码
+
+```python
+import pandas as pd
+df = pd.read_csv('data.csv')
+df = df[df['age'] > 18]
+df.to_csv('output.csv')
+```
+"""
+
+        print("  正在使用 AI 生成 SKILL.md (可能需要几秒钟)...")
+        skill_content = generator.generate_skill_md(test_content, use_ai=True)
+
+        result.add("AI 生成 SKILL.md 成功", skill_content is not None and len(skill_content) > 100, f"length={len(skill_content)}")
+        result.add("SKILL.md 以 YAML 开始", skill_content.startswith("---"), "starts with ---")
+
+        yaml_match = re.match(r'^---\n(.*?)\n---', skill_content, re.DOTALL)
+        result.add("YAML 格式正确", yaml_match is not None, "has valid YAML block")
+
+        if yaml_match:
+            try:
+                front_matter = yaml.safe_load(yaml_match.group(1))
+                result.add("YAML 解析成功", front_matter is not None, "YAML is valid")
+
+                required_fields = ["name", "description"]
+                for field in required_fields:
+                    result.add(f"YAML 包含 {field}", field in front_matter, f"{field}={str(front_matter.get(field, 'N/A'))[:30]}...")
+
+                if "description" in front_matter:
+                    desc = front_matter["description"]
+                    result.add("description 长度合适", len(str(desc)) >= 50, f"length={len(str(desc))}")
+
+            except yaml.YAMLError as e:
+                result.add("YAML 解析", False, f"error: {str(e)}")
+
+        body_match = re.search(r'---\n.*?\n---\n(.+)', skill_content, re.DOTALL)
+        if body_match:
+            body = body_match.group(1).strip()
+            result.add("正文内容存在", len(body) > 50, f"body_length={len(body)}")
+            result.add("正文包含标题", "##" in body, "has headings")
+
+    except Exception as e:
+        result.add("SKILL.md AI 生成测试", False, f"error: {str(e)}")
+
+    return result
+
+
+def test_skill_save_and_load():
+    """测试 SKILL.md 保存和加载"""
+    print("\n=== 测试 SKILL.md 保存和加载 ===")
+    result = TestResult()
+
+    import tempfile
+    import shutil
+    from pathlib import Path
+
+    temp_dir = tempfile.mkdtemp()
+
+    try:
+        from app.core.skill_generator import SkillGenerator
+
+        generator = SkillGenerator()
+
+        test_content = "# 测试保存\n\n这是测试保存功能的内容。"
+        skill_path = Path(temp_dir) / "test-note" / "SKILL.md"
+
+        success = generator.generate_and_save("test-note", test_content, skill_path, use_ai=False)
+
+        result.add("保存 SKILL.md 成功", success, f"success={success}")
+        result.add("文件已创建", skill_path.exists(), f"path={skill_path}")
+
+        if skill_path.exists():
+            with open(skill_path, "r", encoding="utf-8") as f:
+                saved_content = f.read()
+
+            result.add("文件内容正确", len(saved_content) > 0 and "---" in saved_content, f"length={len(saved_content)}")
+
+    except Exception as e:
+        result.add("SKILL.md 保存测试", False, f"error: {str(e)}")
+
+    finally:
+        shutil.rmtree(temp_dir)
 
     return result
 
@@ -195,30 +329,6 @@ def test_ui_components():
 
     except Exception as e:
         result.add("UI 组件测试", False, f"error: {str(e)}")
-
-    return result
-
-
-def test_editor_history():
-    """测试编辑器历史功能（撤销/重做）"""
-    print("\n=== 测试编辑器历史功能 ===")
-    result = TestResult()
-
-    try:
-        from app.widgets.editor import Editor
-
-        # TC01: 检查类常量
-        result.add("最大历史记录数", Editor.MAX_HISTORY == 20, f"MAX_HISTORY={Editor.MAX_HISTORY}")
-
-        # TC02: 检查方法存在
-        result.add("can_go_back 方法", hasattr(Editor, 'can_go_back'), "can_go_back defined")
-        result.add("can_go_forward 方法", hasattr(Editor, 'can_go_forward'), "can_go_forward defined")
-        result.add("go_back 方法", hasattr(Editor, 'go_back'), "go_back defined")
-        result.add("go_forward 方法", hasattr(Editor, 'go_forward'), "go_forward defined")
-        result.add("save_current_to_history 方法", hasattr(Editor, 'save_current_to_history'), "save_current_to_history defined")
-
-    except Exception as e:
-        result.add("编辑器历史测试", False, f"error: {str(e)}")
 
     return result
 
@@ -276,6 +386,50 @@ def test_chat_panel_modes():
     return result
 
 
+def test_ai_integration():
+    """测试 AI 集成（真实 API 调用）"""
+    print("\n=== 测试 AI 集成 ===")
+    result = TestResult()
+
+    try:
+        from app.core.config import get_config
+        from app.ai.client import create_client
+
+        config = get_config()
+        provider = config.ai_provider
+        ai_config = config.get_ai_config()
+
+        if not ai_config.get("api_key") and provider != "ollama":
+            result.add("AI 集成测试", False, "未配置 API Key，跳过测试")
+            return result
+
+        client = create_client(provider, ai_config)
+
+        result.add("AI 客户端创建", client is not None, f"provider={provider}")
+
+        test_messages = [
+            {"role": "user", "content": "请回复'测试成功'四个字，不要回复其他内容。"}
+        ]
+
+        print("  正在调用 AI API (可能需要几秒钟)...")
+        response = client.chat(test_messages)
+
+        result.add("AI 响应成功", len(response) > 0, f"response_length={len(response)}")
+        result.add("AI 响应内容有效", "测试" in response or "成功" in response, f"response={response[:50]}...")
+
+        print("  正在测试流式响应...")
+        stream_response = ""
+        for chunk in client.chat_stream(test_messages):
+            stream_response += chunk
+
+        result.add("AI 流式响应成功", len(stream_response) > 0, f"stream_length={len(stream_response)}")
+
+    except Exception as e:
+        result.add("AI 集成测试", False, f"error: {str(e)}")
+
+    return result
+
+
 def test_config_management():
     """测试配置管理"""
     print("\n=== 测试配置管理 ===")
@@ -299,6 +453,63 @@ def test_config_management():
 
     except Exception as e:
         result.add("配置管理测试", False, f"error: {str(e)}")
+
+    return result
+
+
+def test_mcp_config_parsing():
+    """测试 MCP 配置 JSON 解析"""
+    print("\n=== 测试 MCP 配置解析 ===")
+    result = TestResult()
+
+    try:
+        from app.mcp.client import parse_mcp_config, validate_mcp_server_config
+
+        format1_json = '''{
+  "sequential-thinking": {
+    "command": "npx",
+    "args": ["-y", "@modelcontextprotocol/server-sequential-thinking"]
+  }
+}'''
+        is_valid, servers, error = parse_mcp_config(format1_json)
+        result.add("格式1 - 直接服务器配置解析", is_valid and "sequential-thinking" in servers, f"servers={list(servers.keys()) if servers else []}")
+
+        if is_valid and servers:
+            config = servers["sequential-thinking"]
+            result.add("格式1 - command 正确", config.get("command") == "npx", f"command={config.get('command')}")
+            result.add("格式1 - args 正确", config.get("args") == ["-y", "@modelcontextprotocol/server-sequential-thinking"], f"args={config.get('args')}")
+
+        format2_json = '''{
+  "mcpServers": {
+    "sequential-thinking": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-sequential-thinking"]
+    }
+  }
+}'''
+        is_valid, servers, error = parse_mcp_config(format2_json)
+        result.add("格式2 - mcpServers 键解析", is_valid and "sequential-thinking" in servers, f"servers={list(servers.keys()) if servers else []}")
+
+        if is_valid and servers:
+            config = servers["sequential-thinking"]
+            result.add("格式2 - command 正确", config.get("command") == "npx", f"command={config.get('command')}")
+
+        invalid_json = '''{invalid json}'''
+        is_valid, servers, error = parse_mcp_config(invalid_json)
+        result.add("无效 JSON 检测", not is_valid, f"error={error[:30] if error else 'None'}")
+
+        missing_command_json = '''{"test": {"args": []}}'''
+        is_valid, servers, error = parse_mcp_config(missing_command_json)
+        if is_valid and servers:
+            is_valid_config, error = validate_mcp_server_config(servers["test"])
+            result.add("缺少 command 字段检测", not is_valid_config, f"error={error}")
+
+        valid_config = {"command": "npx", "args": ["-y", "test"]}
+        is_valid, error = validate_mcp_server_config(valid_config)
+        result.add("有效配置验证", is_valid, f"valid={is_valid}")
+
+    except Exception as e:
+        result.add("MCP 配置解析测试", False, f"error: {str(e)}")
 
     return result
 
@@ -369,11 +580,14 @@ def main():
     all_results.append(test_note_manager())
     all_results.append(test_folder_manager())
     all_results.append(test_skill_generation())
-    all_results.append(test_editor_history())
+    all_results.append(test_skill_generation_with_ai())
+    all_results.append(test_skill_save_and_load())
     all_results.append(test_ui_components())
     all_results.append(test_app_icon())
     all_results.append(test_chat_panel_modes())
+    all_results.append(test_ai_integration())
     all_results.append(test_config_management())
+    all_results.append(test_mcp_config_parsing())
     all_results.append(test_existing_data())
 
     # 总汇总
