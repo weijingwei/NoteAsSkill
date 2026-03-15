@@ -1,8 +1,25 @@
 """笔记管理模块
 
 负责笔记的 CRUD 操作、文件夹管理和标签管理。
-"""
 
+设计模式：单例模式 (Singleton Pattern)
+- 使用 SingletonMeta 元类确保全局只有一个笔记管理器实例
+- 线程安全的单例实现
+- 支持测试时清除实例
+
+使用方式：
+    # 获取笔记管理器实例
+    manager = get_note_manager()
+    
+    # 创建笔记
+    note = manager.create_note("我的笔记", "内容...")
+    
+    # 获取笔记
+    note = manager.get_note("note-id")
+    
+    # 列出笔记
+    notes = manager.list_notes(folder="my-folder")
+"""
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -11,11 +28,13 @@ import json
 import re
 import shutil
 
+from .singleton import SingletonMeta
+
 
 @dataclass
 class Note:
     """笔记数据类"""
-
+    
     id: str
     title: str
     path: Path
@@ -53,14 +72,13 @@ class Note:
 @dataclass
 class Folder:
     """文件夹数据类"""
-
+    
     name: str
     path: Path
     parent: str = ""
-    # 渐进式披露相关属性
-    skill_hash: str = ""           # SKILL.md 文件的 hash 标识
-    children_hash: str = ""        # 子项内容 hash（用于检测变化）
-    pending_update: bool = False   # 是否有待更新
+    skill_hash: str = ""
+    children_hash: str = ""
+    pending_update: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         """转换为字典"""
@@ -86,9 +104,17 @@ class Folder:
         )
 
 
-class NoteManager:
-    """笔记管理器"""
-
+class NoteManager(metaclass=SingletonMeta):
+    """笔记管理器
+    
+    使用单例模式确保全局只有一个笔记管理器实例。
+    负责笔记和文件夹的 CRUD 操作。
+    
+    设计模式：单例模式
+    - SingletonMeta 元类确保线程安全的单例
+    - 全局访问点：get_note_manager() 函数
+    """
+    
     def __init__(self, notebook_path: Path | None = None):
         """初始化笔记管理器
 
@@ -140,6 +166,7 @@ class NoteManager:
             "tags": list(self._tags),
         }
 
+        self.index_path.parent.mkdir(parents=True, exist_ok=True)
         with open(self.index_path, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
 
@@ -167,8 +194,6 @@ class NoteManager:
     def _get_attachments_path(self, note_id: str) -> Path:
         """获取附件目录路径"""
         return self._get_note_path(note_id) / "attachments"
-
-    # ==================== 笔记操作 ====================
 
     def create_note(
         self,
@@ -309,7 +334,6 @@ class NoteManager:
         if tags:
             notes = [n for n in notes if any(tag in n.tags for tag in tags)]
 
-        # 自然排序：支持标题中的数字排序（如 1. 2. 10.）
         notes.sort(key=lambda n: self._natural_sort_key(n.title))
         return notes
 
@@ -339,8 +363,6 @@ class NoteManager:
                 results.append(note)
 
         return results
-
-    # ==================== 文件夹操作 ====================
 
     def create_folder(self, name: str, parent: str = "") -> Folder:
         """创建文件夹"""
@@ -402,8 +424,6 @@ class NoteManager:
 
         return True
 
-    # ==================== 标签操作 ====================
-
     def list_tags(self) -> list[str]:
         """列出所有标签"""
         return list(self._tags)
@@ -442,13 +462,12 @@ class NoteManager:
         return [n for n in self._notes.values() if tag in n.tags]
 
 
-# 全局实例
-_note_manager: NoteManager | None = None
-
-
 def get_note_manager() -> NoteManager:
-    """获取全局笔记管理器实例"""
-    global _note_manager
-    if _note_manager is None:
-        _note_manager = NoteManager()
-    return _note_manager
+    """获取全局笔记管理器实例
+    
+    使用单例模式，返回唯一的笔记管理器实例。
+    
+    Returns:
+        NoteManager 实例
+    """
+    return NoteManager()

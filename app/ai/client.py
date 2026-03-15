@@ -1,6 +1,19 @@
 """AI 客户端抽象基类
 
 定义统一的 AI 客户端接口。
+
+设计模式：
+- 模板方法模式 (Template Method Pattern): AIClient 基类定义算法骨架
+- 适配器模式 (Adapter Pattern): 各具体客户端适配不同 AI 提供商的 API
+
+使用方式：
+    # 使用工厂创建客户端（推荐）
+    from app.ai.factory import AIClientFactory
+    client = AIClientFactory.create("openai", {"api_key": "xxx"})
+    
+    # 或直接实例化
+    from app.ai.openai_client import OpenAIClient
+    client = OpenAIClient(api_key="xxx", model="gpt-4")
 """
 
 from abc import ABC, abstractmethod
@@ -11,7 +24,7 @@ from typing import Any, Iterator
 @dataclass
 class Message:
     """消息数据类"""
-
+    
     role: str  # "user" | "assistant" | "system"
     content: str
 
@@ -20,8 +33,20 @@ class Message:
 
 
 class AIClient(ABC):
-    """AI 客户端抽象基类"""
-
+    """AI 客户端抽象基类
+    
+    定义了所有 AI 客户端的公共接口。
+    子类必须实现 chat() 和 chat_stream() 方法。
+    
+    设计模式：模板方法模式
+    - 基类定义算法骨架（validate_config, get_config, set_config）
+    - 子类实现具体步骤（chat, chat_stream）
+    
+    设计模式：适配器模式
+    - 将不同 AI 提供商的 API 适配为统一接口
+    - 客户端代码无需关心底层实现差异
+    """
+    
     def __init__(
         self,
         api_key: str = "",
@@ -108,8 +133,10 @@ class AIClient(ABC):
 
 
 def create_client(provider: str, config: dict[str, Any]) -> AIClient:
-    """创建 AI 客户端
+    """创建 AI 客户端（兼容旧代码的便捷函数）
 
+    推荐使用 AIClientFactory.create() 代替此函数。
+    
     Args:
         provider: 提供商名称（openai, anthropic, ollama）
         config: 配置字典
@@ -120,26 +147,5 @@ def create_client(provider: str, config: dict[str, Any]) -> AIClient:
     Raises:
         ValueError: 不支持的提供商
     """
-    # 延迟导入避免循环依赖
-    if provider == "openai":
-        from .openai_client import OpenAIClient
-        return OpenAIClient(
-            api_key=config.get("api_key", ""),
-            base_url=config.get("base_url", "https://api.openai.com/v1"),
-            model=config.get("model", "gpt-4"),
-        )
-    elif provider == "anthropic":
-        from .anthropic_client import AnthropicClient
-        return AnthropicClient(
-            api_key=config.get("api_key", ""),
-            base_url=config.get("base_url", "https://api.anthropic.com"),
-            model=config.get("model", "claude-3-opus-20240229"),
-        )
-    elif provider == "ollama":
-        from .ollama_client import OllamaClient
-        return OllamaClient(
-            base_url=config.get("base_url", "http://localhost:11434"),
-            model=config.get("model", "llama2"),
-        )
-    else:
-        raise ValueError(f"Unsupported AI provider: {provider}")
+    from .factory import AIClientFactory
+    return AIClientFactory.create(provider, config)
