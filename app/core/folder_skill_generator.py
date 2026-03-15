@@ -2,11 +2,26 @@
 
 负责生成文件夹级别的 SKILL.md，聚合子项摘要信息。
 支持三种生成模式：simple（纯规则）、ai（AI生成）、hybrid（混合）。
-"""
 
+设计模式：策略模式 (Strategy Pattern)
+- 将生成算法封装在策略类中
+- 支持运行时切换生成策略
+- 新增策略无需修改现有代码
+
+使用方式：
+    # 获取生成器实例
+    generator = get_folder_skill_generator()
+    
+    # 设置 AI 客户端（可选）
+    generator.set_ai_client(ai_client)
+    
+    # 生成 SKILL.md
+    content = generator.generate_folder_skill(folder)
+    
+    # 保存
+    skill_hash = generator.save_folder_skill(folder, content)
+"""
 import hashlib
-from dataclasses import dataclass
-from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -14,27 +29,26 @@ import yaml
 
 from .config import get_config
 from .note_manager import Folder, Note, get_note_manager
+from .folder_skill_strategies import (
+    NoteSummary,
+    FolderSummary,
+    FolderSkillStrategyFactory,
+)
+from .singleton import SingletonMeta
 
 
-@dataclass
-class NoteSummary:
-    """笔记摘要"""
-    id: str
-    title: str
-    description: str = ""
-
-
-@dataclass
-class FolderSummary:
-    """文件夹摘要"""
-    name: str
-    description: str = ""
-    skill_hash: str = ""
-
-
-class FolderSkillGenerator:
-    """文件夹 SKILL 生成器"""
-
+class FolderSkillGenerator(metaclass=SingletonMeta):
+    """文件夹 SKILL 生成器
+    
+    使用策略模式生成文件夹级别的 SKILL.md。
+    根据配置选择不同的生成策略。
+    
+    设计模式：策略模式
+    - FolderSkillStrategyFactory 提供策略实例
+    - 支持运行时切换策略
+    - 新增策略只需注册到工厂
+    """
+    
     def __init__(self):
         """初始化生成器"""
         self._ai_client: Any = None
@@ -43,49 +57,79 @@ class FolderSkillGenerator:
         self.folder_skills_path.mkdir(parents=True, exist_ok=True)
 
     def set_ai_client(self, client: Any) -> None:
-        """设置 AI 客户端"""
+        """设置 AI 客户端
+        
+        Args:
+            client: AI 客户端实例
+        """
         self._ai_client = client
 
     def generate_folder_skill(self, folder: Folder) -> str:
         """生成文件夹 SKILL.md 内容
-
+        
+        根据配置选择生成策略，聚合子项信息生成 SKILL.md。
+        
         Args:
             folder: 文件夹对象
-
+            
         Returns:
             SKILL.md 内容
         """
-        # 收集子项
-        child_notes = self._get_child_notes(folder.name)
-        child_folders = self._get_child_folders(folder.name)
-
-        # 提取摘要
-        note_summaries = [self._extract_note_summary(note) for note in child_notes]
-        folder_summaries = [self._extract_folder_summary(f) for f in child_folders]
-
-        # 根据模式生成
+        note_summaries = self._get_child_notes(folder.name)
+        folder_summaries = self._get_child_folders(folder.name)
+        
+        note_summaries_data = [
+            self._extract_note_summary(note) for note in note_summaries
+        ]
+        folder_summaries_data = [
+            self._extract_folder_summary(f) for f in folder_summaries
+        ]
+        
         config = get_config()
         mode = config.folder_skill_generation_mode
-
-        if mode == "simple":
-            return self._generate_simple(folder, note_summaries, folder_summaries)
-        elif mode == "ai":
-            return self._generate_with_ai(folder, note_summaries, folder_summaries)
-        else:  # hybrid
-            return self._generate_hybrid(folder, note_summaries, folder_summaries)
+        
+        strategy = FolderSkillStrategyFactory.get(mode)
+        
+        return strategy.generate(
+            folder.name,
+            note_summaries_data,
+            folder_summaries_data,
+            self._ai_client
+        )
 
     def _get_child_notes(self, folder_name: str) -> list[Note]:
-        """获取直接子笔记"""
+        """获取直接子笔记
+        
+        Args:
+            folder_name: 文件夹名称
+            
+        Returns:
+            子笔记列表
+        """
         notes = self.note_manager.list_notes()
         return [n for n in notes if n.folder == folder_name]
 
     def _get_child_folders(self, folder_name: str) -> list[Folder]:
-        """获取直接子文件夹"""
+        """获取直接子文件夹
+        
+        Args:
+            folder_name: 文件夹名称
+            
+        Returns:
+            子文件夹列表
+        """
         folders = self.note_manager.list_folders()
         return [f for f in folders if f.parent == folder_name]
 
     def _extract_note_summary(self, note: Note) -> NoteSummary:
-        """从笔记 SKILL.md 提取摘要"""
+        """从笔记 SKILL.md 提取摘要
+        
+        Args:
+            note: 笔记对象
+            
+        Returns:
+            笔记摘要
+        """
         skill_path = self.note_manager._get_skill_file(note.id)
 
         description = ""
@@ -94,13 +138,14 @@ class FolderSkillGenerator:
                 with open(skill_path, "r", encoding="utf-8") as f:
                     content = f.read()
 
-                # 解析 YAML front matter
                 if content.startswith("---"):
                     parts = content.split("---", 2)
                     if len(parts) >= 3:
                         front_matter = yaml.safe_load(parts[1])
                         if front_matter:
-                            description = front_matter.get("description", "")[:200]
+                            desc = front_matter.get("description", "")
+                            if desc:
+                                description = desc[:200]
             except Exception:
                 pass
 
@@ -111,7 +156,14 @@ class FolderSkillGenerator:
         )
 
     def _extract_folder_summary(self, folder: Folder) -> FolderSummary:
-        """从子文件夹 SKILL.md 提取摘要"""
+        """从子文件夹 SKILL.md 提取摘要
+        
+        Args:
+            folder: 文件夹对象
+            
+        Returns:
+            文件夹摘要
+        """
         description = ""
 
         if folder.skill_hash:
@@ -126,7 +178,9 @@ class FolderSkillGenerator:
                         if len(parts) >= 3:
                             front_matter = yaml.safe_load(parts[1])
                             if front_matter:
-                                description = front_matter.get("description", "")[:200]
+                                desc = front_matter.get("description", "")
+                                if desc:
+                                    description = desc[:200]
                 except Exception:
                     pass
 
@@ -136,235 +190,16 @@ class FolderSkillGenerator:
             skill_hash=folder.skill_hash,
         )
 
-    def _generate_simple(
-        self,
-        folder: Folder,
-        note_summaries: list[NoteSummary],
-        folder_summaries: list[FolderSummary],
-    ) -> str:
-        """简单模式：纯规则聚合"""
-        front_matter = {
-            "name": f"folder-{folder.name}",
-            "type": "folder",
-            "children": {
-                "notes": [
-                    {"id": s.id, "title": s.title, "summary": s.description}
-                    for s in note_summaries
-                ],
-                "folders": [
-                    {"name": s.name, "summary": s.description}
-                    for s in folder_summaries
-                ],
-            },
-        }
-
-        content = "---\n"
-        content += yaml.dump(front_matter, allow_unicode=True, default_flow_style=False)
-        content += "---\n\n"
-
-        # 子笔记列表
-        if note_summaries:
-            content += "## 子笔记\n"
-            for s in note_summaries:
-                content += f"- [{s.title}](../skills/{s.id}/)"
-                if s.description:
-                    content += f" - {s.description}"
-                content += "\n"
-            content += "\n"
-
-        # 子文件夹列表
-        if folder_summaries:
-            content += "## 子文件夹\n"
-            for s in folder_summaries:
-                content += f"- [{s.name}](./{s.name}/)"
-                if s.description:
-                    content += f" - {s.description}"
-                content += "\n"
-
-        return content
-
-    def _generate_with_ai(
-        self,
-        folder: Folder,
-        note_summaries: list[NoteSummary],
-        folder_summaries: list[FolderSummary],
-    ) -> str:
-        """AI 模式：AI 生成所有内容"""
-        # 先生成基础结构
-        base_content = self._generate_simple(folder, note_summaries, folder_summaries)
-
-        # 如果没有 AI 客户端，返回基础内容
-        if not self._ai_client:
-            return base_content
-
-        # 构建 AI 提示
-        prompt = self._build_ai_prompt(folder, note_summaries, folder_summaries)
-
-        try:
-            ai_description = self._ai_client.chat([
-                {"role": "user", "content": prompt}
-            ])
-        except Exception:
-            ai_description = ""
-
-        # 将 AI 描述插入到 front matter
-        if ai_description:
-            front_matter = {
-                "name": f"folder-{folder.name}",
-                "type": "folder",
-                "description": ai_description.strip(),
-                "children": {
-                    "notes": [
-                        {"id": s.id, "title": s.title, "summary": s.description}
-                        for s in note_summaries
-                    ],
-                    "folders": [
-                        {"name": s.name, "summary": s.description}
-                        for s in folder_summaries
-                    ],
-                },
-            }
-
-            content = "---\n"
-            content += yaml.dump(front_matter, allow_unicode=True, default_flow_style=False)
-            content += "---\n\n"
-            content += f"## 概述\n\n{ai_description.strip()}\n\n"
-
-            if note_summaries:
-                content += "## 子笔记\n"
-                for s in note_summaries:
-                    content += f"- [{s.title}](../skills/{s.id}/)"
-                    if s.description:
-                        content += f" - {s.description}"
-                    content += "\n"
-                content += "\n"
-
-            if folder_summaries:
-                content += "## 子文件夹\n"
-                for s in folder_summaries:
-                    content += f"- [{s.name}](./{s.name}/)"
-                    if s.description:
-                        content += f" - {s.description}"
-                    content += "\n"
-
-            return content
-
-        return base_content
-
-    def _generate_hybrid(
-        self,
-        folder: Folder,
-        note_summaries: list[NoteSummary],
-        folder_summaries: list[FolderSummary],
-    ) -> str:
-        """混合模式：基础结构用规则，概要描述用 AI"""
-        # 先生成基础结构
-        base_content = self._generate_simple(folder, note_summaries, folder_summaries)
-
-        # 如果没有子项，直接返回
-        if not note_summaries and not folder_summaries:
-            return base_content
-
-        # 如果没有 AI 客户端，返回基础内容
-        if not self._ai_client:
-            return base_content
-
-        # 构建 AI 提示
-        prompt = self._build_ai_prompt(folder, note_summaries, folder_summaries)
-
-        try:
-            ai_description = self._ai_client.chat([
-                {"role": "user", "content": prompt}
-            ])
-        except Exception:
-            ai_description = ""
-
-        # 将 AI 描述插入
-        if ai_description:
-            front_matter = {
-                "name": f"folder-{folder.name}",
-                "type": "folder",
-                "description": ai_description.strip(),
-                "children": {
-                    "notes": [
-                        {"id": s.id, "title": s.title, "summary": s.description}
-                        for s in note_summaries
-                    ],
-                    "folders": [
-                        {"name": s.name, "summary": s.description}
-                        for s in folder_summaries
-                    ],
-                },
-            }
-
-            content = "---\n"
-            content += yaml.dump(front_matter, allow_unicode=True, default_flow_style=False)
-            content += "---\n\n"
-            content += f"## 概述\n\n{ai_description.strip()}\n\n"
-
-            if note_summaries:
-                content += "## 子笔记\n"
-                for s in note_summaries:
-                    content += f"- [{s.title}](../skills/{s.id}/)"
-                    if s.description:
-                        content += f" - {s.description}"
-                    content += "\n"
-                content += "\n"
-
-            if folder_summaries:
-                content += "## 子文件夹\n"
-                for s in folder_summaries:
-                    content += f"- [{s.name}](./{s.name}/)"
-                    if s.description:
-                        content += f" - {s.description}"
-                    content += "\n"
-
-            return content
-
-        return base_content
-
-    def _build_ai_prompt(
-        self,
-        folder: Folder,
-        note_summaries: list[NoteSummary],
-        folder_summaries: list[FolderSummary],
-    ) -> str:
-        """构建 AI 提示"""
-        prompt = f"这是一个名为「{folder.name}」的文件夹，包含以下内容：\n\n"
-
-        if note_summaries:
-            prompt += "笔记：\n"
-            for s in note_summaries:
-                prompt += f"- {s.title}"
-                if s.description:
-                    prompt += f"：{s.description}"
-                prompt += "\n"
-            prompt += "\n"
-
-        if folder_summaries:
-            prompt += "子文件夹：\n"
-            for s in folder_summaries:
-                prompt += f"- {s.name}"
-                if s.description:
-                    prompt += f"：{s.description}"
-                prompt += "\n"
-            prompt += "\n"
-
-        prompt += "请生成一段 100-200 字的概要描述，说明这个文件夹的主题和内容组织。只返回描述文字，不要其他内容。"
-
-        return prompt
-
     def save_folder_skill(self, folder: Folder, content: str) -> str:
         """保存文件夹 SKILL.md
-
+        
         Args:
             folder: 文件夹对象
             content: SKILL.md 内容
-
+            
         Returns:
             skill_hash
         """
-        # 计算 hash
         skill_hash = hashlib.md5(folder.name.encode()).hexdigest()[:16]
         skill_path = self.folder_skills_path / f"{skill_hash}.md"
 
@@ -374,18 +209,24 @@ class FolderSkillGenerator:
         return skill_hash
 
     def get_folder_skill_path(self, folder: Folder) -> Path:
-        """获取文件夹 SKILL.md 路径"""
+        """获取文件夹 SKILL.md 路径
+        
+        Args:
+            folder: 文件夹对象
+            
+        Returns:
+            SKILL.md 文件路径
+        """
         skill_hash = folder.skill_hash or hashlib.md5(folder.name.encode()).hexdigest()[:16]
         return self.folder_skills_path / f"{skill_hash}.md"
 
 
-# 全局实例
-_folder_skill_generator: FolderSkillGenerator | None = None
-
-
 def get_folder_skill_generator() -> FolderSkillGenerator:
-    """获取全局文件夹 SKILL 生成器实例"""
-    global _folder_skill_generator
-    if _folder_skill_generator is None:
-        _folder_skill_generator = FolderSkillGenerator()
-    return _folder_skill_generator
+    """获取全局文件夹 SKILL 生成器实例
+    
+    使用单例模式，返回唯一的生成器实例。
+    
+    Returns:
+        FolderSkillGenerator 实例
+    """
+    return FolderSkillGenerator()

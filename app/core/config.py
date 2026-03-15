@@ -1,12 +1,30 @@
 """配置管理模块
 
 负责加载、保存和管理应用配置，支持跨平台路径处理。
-"""
 
+设计模式：单例模式 (Singleton Pattern)
+- 使用 SingletonMeta 元类确保全局只有一个配置实例
+- 线程安全的单例实现
+- 支持测试时清除实例
+
+使用方式：
+    # 获取配置实例
+    config = get_config()
+    
+    # 访问配置
+    provider = config.ai_provider
+    theme = config.theme
+    
+    # 修改配置
+    config.theme = "dark"
+    config.save()
+"""
 from pathlib import Path
 from typing import Any
 
 import yaml
+
+from .singleton import SingletonMeta
 
 
 def get_system_config() -> dict[str, Any]:
@@ -26,21 +44,30 @@ def get_version() -> str:
     """获取应用版本号
 
     Returns:
-        版本号字符串，如 "v0.2.71"
+        版本号字符串，如 "v0.2.62"
     """
     system_config = get_system_config()
     return system_config.get("version", "v0.0.0")
 
 
-class Config:
-    """应用配置管理类"""
+class Config(metaclass=SingletonMeta):
+    """应用配置管理类
+    
+    使用单例模式确保全局只有一个配置实例。
+    支持嵌套配置访问、自动保存等功能。
+    
+    设计模式：单例模式
+    - SingletonMeta 元类确保线程安全的单例
+    - 全局访问点：get_config() 函数
+    - 支持测试时清除实例：SingletonMeta.clear_instance(Config)
+    """
 
     DEFAULT_CONFIG = {
         "app": {
             "theme": "light",
             "auto_save": True,
             "auto_save_interval": 30,
-            "auto_generate_skill": True,  # 自动生成 SKILL.md
+            "auto_generate_skill": True,
         },
         "ai": {
             "provider": "openai",
@@ -64,21 +91,21 @@ class Config:
             "preview_mode": "split",
         },
         "folder_skill": {
-            "enabled": True,                    # 是否启用文件夹 SKILL
-            "auto_update": True,                # 是否自动更新
-            "update_delay": 30,                 # 延迟更新时间（秒）
-            "generation_mode": "hybrid",        # simple | ai | hybrid
+            "enabled": True,
+            "auto_update": True,
+            "update_delay": 30,
+            "generation_mode": "hybrid",
         },
         "git": {
-            "enabled": False,                   # 是否启用 git 同步
-            "remote_url": "",                   # git 远程仓库地址（HTTPS 或 SSH）
-            "branch": "main",                   # 分支名称
-            "auto_sync": False,                 # 是否自动同步
-            "commit_message": "更新笔记",        # 默认提交信息
+            "enabled": False,
+            "remote_url": "",
+            "branch": "main",
+            "auto_sync": False,
+            "commit_message": "更新笔记",
         },
         "mcp": {
-            "enabled": False,                   # 是否启用 MCP
-            "servers": {},                      # MCP 服务器配置
+            "enabled": False,
+            "servers": {},
         },
     }
 
@@ -89,7 +116,6 @@ class Config:
             config_path: 配置文件路径，默认为 notebook/.config.yaml
         """
         if config_path is None:
-            # 使用项目目录下的 notebook/.config.yaml
             self.config_path = Path(__file__).parent.parent.parent / "notebook" / ".config.yaml"
         else:
             self.config_path = Path(config_path)
@@ -242,8 +268,6 @@ class Config:
     def preview_mode(self, value: str) -> None:
         self.set("editor.preview_mode", value)
 
-    # ==================== 文件夹 SKILL 配置 ====================
-
     @property
     def folder_skill_enabled(self) -> bool:
         """是否启用文件夹 SKILL"""
@@ -279,8 +303,6 @@ class Config:
     @folder_skill_generation_mode.setter
     def folder_skill_generation_mode(self, value: str) -> None:
         self.set("folder_skill.generation_mode", value)
-
-    # ==================== Git 同步配置 ====================
 
     @property
     def git_enabled(self) -> bool:
@@ -327,8 +349,6 @@ class Config:
     def git_commit_message(self, value: str) -> None:
         self.set("git.commit_message", value)
 
-    # ==================== MCP 配置 ====================
-
     @property
     def mcp_enabled(self) -> bool:
         """是否启用 MCP"""
@@ -368,20 +388,24 @@ class Config:
         return False
 
 
-# 全局配置实例
-_config: Config | None = None
-
-
 def get_config() -> Config:
-    """获取全局配置实例"""
-    global _config
-    if _config is None:
-        _config = Config()
-    return _config
+    """获取全局配置实例
+    
+    使用单例模式，返回唯一的配置实例。
+    
+    Returns:
+        Config 实例
+    """
+    return Config()
 
 
 def reload_config() -> Config:
-    """重新加载配置"""
-    global _config
-    _config = Config()
-    return _config
+    """重新加载配置
+    
+    清除现有实例并创建新的配置实例。
+    
+    Returns:
+        新的 Config 实例
+    """
+    SingletonMeta.clear_instance(Config)
+    return Config()
