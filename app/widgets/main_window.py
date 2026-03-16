@@ -1409,13 +1409,14 @@ def run_app() -> None:
     app.setApplicationName("NoteAsSkill")
     app.setOrganizationName("NoteAsSkill")
 
-    # 设置应用样式
     app.setStyle("Fusion")
 
     window = MainWindow()
     window.show()
+    
+    window.raise_()
+    window.activateWindow()
 
-    # 启动后 500ms 执行自动拉取
     QTimer.singleShot(500, window._startup_git_pull)
 
     sys.exit(app.exec())
