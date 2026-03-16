@@ -1040,6 +1040,9 @@ class MainWindow(QMainWindow):
         if self._current_note is None:
             return
 
+        if not self._has_unsaved_changes():
+            return
+
         content = self.editor.get_content()
 
         note_manager = get_note_manager()
@@ -1215,8 +1218,9 @@ class MainWindow(QMainWindow):
         """内容改变 - 使用定时器防抖保存"""
         config = get_config()
         if config.auto_save:
-            # 重置定时器，实现防抖
-            interval = config.auto_save_interval * 1000  # 转换为毫秒
+            if not self._has_unsaved_changes():
+                return
+            interval = config.auto_save_interval * 1000
             self._save_timer.start(interval)
 
     @Slot()

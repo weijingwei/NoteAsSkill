@@ -3,6 +3,7 @@
 负责从笔记内容自动生成 SKILL.md 文件。
 """
 
+import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -209,8 +210,6 @@ returns:
 
     def _generate_simple(self, content: str, note_title: str = "") -> str:
         """简单规则生成 SKILL.md"""
-        import re
-
         # 使用笔记标题或从内容中提取标题
         if note_title:
             title = note_title

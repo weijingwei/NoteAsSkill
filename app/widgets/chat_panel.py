@@ -580,7 +580,7 @@ class ChatPanel(QWidget):
         """)
         input_top_toolbar.addWidget(self.current_file_label)
 
-        # 眼睛图标（切换是否使用笔记上下文）
+        # 图钉图标（切换是否使用笔记上下文）
         self.eye_btn = QToolButton()
         self.eye_btn.setCheckable(True)
         self.eye_btn.setChecked(True)
@@ -599,7 +599,7 @@ class ChatPanel(QWidget):
                 color: #FFFFFF;
             }
         """)
-        self.eye_btn.setText("👁")
+        self.eye_btn.setText("📌")
         self.eye_btn.clicked.connect(self._on_eye_toggled)
         input_top_toolbar.addWidget(self.eye_btn)
 
