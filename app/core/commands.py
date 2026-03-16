@@ -172,11 +172,12 @@ class GenerateSkillCommand(Command):
     用于触发笔记 SKILL.md 的生成操作。
     """
     
-    def __init__(self, note_id: str, note_content: str, skill_path: str):
+    def __init__(self, note_id: str, note_content: str, skill_path: str, note_title: str = ""):
         super().__init__(CommandType.GENERATE_SKILL)
         self.note_id = note_id
         self.note_content = note_content
         self.skill_path = skill_path
+        self.note_title = note_title
         self._previous_content: Optional[str] = None
     
     def execute(self) -> CommandResult:
@@ -203,7 +204,7 @@ class GenerateSkillCommand(Command):
                     pass
             
             success = generator.generate_and_save(
-                self.note_id, self.note_content, skill_path
+                self.note_id, self.note_content, skill_path, note_title=self.note_title
             )
             
             if success:

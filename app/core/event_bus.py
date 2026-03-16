@@ -26,6 +26,7 @@
     # 取消订阅
     bus.unsubscribe(EventType.NOTE_CREATED, self.on_note_created)
 """
+import sys
 from dataclasses import dataclass, field
 from enum import Enum, auto
 from typing import Any, Callable
@@ -181,7 +182,10 @@ class EventBus(QObject):
                 try:
                     callback(event)
                 except Exception as e:
-                    print(f"Event callback error for {event.type.name}: {e}")
+                    try:
+                        print(f"Event callback error for {event.type.name}: {e}")
+                    except UnicodeEncodeError:
+                        print(f"Event callback error for {event.type.name}: {e}", file=sys.stderr)
     
     def clear_subscribers(self, event_type: EventType | None = None) -> None:
         """清除订阅者

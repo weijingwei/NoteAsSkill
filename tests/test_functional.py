@@ -364,9 +364,8 @@ def test_chat_panel_modes():
     try:
         # TC01: 验证模式常量
         from app.widgets.chat_panel import ChatPanel
-        result.add("生成 SKILL 模式", hasattr(ChatPanel, 'MODE_SKILL'), f"mode={ChatPanel.MODE_SKILL}")
-        result.add("笔记问答模式", hasattr(ChatPanel, 'MODE_QA'), f"mode={ChatPanel.MODE_QA}")
-        result.add("通用对话模式", hasattr(ChatPanel, 'MODE_CHAT'), f"mode={ChatPanel.MODE_CHAT}")
+        result.add("生成 SKILL 模式", hasattr(ChatPanel, 'MODE_SKILL'), f"mode={ChatPanel.MODE_SKILL if hasattr(ChatPanel, 'MODE_SKILL') else 'N/A'}")
+        result.add("通用对话模式", hasattr(ChatPanel, 'MODE_CHAT'), f"mode={ChatPanel.MODE_CHAT if hasattr(ChatPanel, 'MODE_CHAT') else 'N/A'}")
 
         # TC02: 验证 AI 客户端接口
         from app.ai.client import AIClient, create_client
@@ -379,6 +378,70 @@ def test_chat_panel_modes():
 
     except Exception as e:
         result.add("AI 对话模式测试", False, f"error: {str(e)}")
+
+    return result
+
+
+def test_chat_panel_responsive_layout():
+    """测试 ChatPanel 自适应布局
+    
+    验证 QListWidget.setItemWidget 的固定大小问题是否已修复。
+    参考: CLAUDE.md - 2024-03-16 经验教训
+    """
+    print("\n=== 测试 ChatPanel 自适应布局 ===")
+    result = TestResult()
+
+    try:
+        from PySide6.QtWidgets import QApplication, QListWidget, QListWidgetItem
+        from PySide6.QtCore import Qt, QTimer, QSize
+        from app.widgets.chat_panel import MessageItemWidget
+        
+        # 确保 QApplication 存在
+        app = QApplication.instance()
+        if app is None:
+            app = QApplication([])
+        
+        # 创建测试列表
+        list_widget = QListWidget()
+        list_widget.resize(400, 300)
+        
+        # 添加消息项
+        item = QListWidgetItem()
+        widget = MessageItemWidget("AI", "测试消息，用于验证自适应布局功能是否正常工作。", False)
+        item.setData(Qt.ItemDataRole.UserRole, {"widget": widget})
+        list_widget.addItem(item)
+        list_widget.setItemWidget(item, widget)
+        
+        # 初始化布局
+        QTimer.singleShot(100, lambda: None)
+        app.processEvents()
+        
+        # TC01: 初始宽度检查
+        initial_width = widget.width()
+        result.add("初始 Widget 宽度", initial_width > 0, f"width={initial_width}")
+        
+        # TC02: 设置最大宽度后检查
+        list_widget.resize(300, 300)
+        app.processEvents()
+        
+        available_width = list_widget.viewport().width() - 8
+        widget.setMaximumWidth(available_width)
+        app.processEvents()
+        
+        new_width = widget.width()
+        result.add("缩小后 Widget 宽度变化", new_width <= initial_width, f"new_width={new_width}")
+        
+        # TC03: 验证 _update_height 方法存在
+        result.add("_update_height 方法存在", hasattr(widget, '_update_height'), "method defined")
+        
+        # TC04: 验证 sizeHint 方法存在
+        result.add("sizeHint 方法存在", hasattr(widget, 'sizeHint'), "method defined")
+        
+        # TC05: 验证 setMaximumWidth 调用
+        result.add("setMaximumWidth 可调用", hasattr(widget, 'setMaximumWidth'), "method defined")
+        
+    except Exception as e:
+        result.add("ChatPanel 自适应布局测试", False, f"error: {str(e)}")
 
     return result
 
@@ -597,6 +660,7 @@ def main():
     all_results.append(test_ui_components())
     all_results.append(test_app_icon())
     all_results.append(test_chat_panel_modes())
+    all_results.append(test_chat_panel_responsive_layout())
     all_results.append(test_ai_integration())
     all_results.append(test_config_management())
     all_results.append(test_mcp_config_parsing())

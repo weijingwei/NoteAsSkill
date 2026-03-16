@@ -169,11 +169,12 @@ class SkillGeneratorWorker(QThread):
 
     finished = Signal(bool, str)  # (success, message)
 
-    def __init__(self, note_id: str, content: str, skill_path: Path):
+    def __init__(self, note_id: str, content: str, skill_path: Path, note_title: str = ""):
         super().__init__()
         self.note_id = note_id
         self.content = content
         self.skill_path = skill_path
+        self.note_title = note_title
 
     def run(self) -> None:
         """运行生成任务"""
@@ -194,7 +195,7 @@ class SkillGeneratorWorker(QThread):
 
             # 生成
             success = skill_generator.generate_and_save(
-                self.note_id, self.content, self.skill_path
+                self.note_id, self.content, self.skill_path, note_title=self.note_title
             )
 
             if success:
@@ -413,6 +414,7 @@ class MainWindow(QMainWindow):
         chat_toolbar = QToolBar()
         chat_toolbar.setMovable(False)
         chat_toolbar.setFixedHeight(36)
+        chat_toolbar.setIconSize(QSize(16, 16))
         # 添加一个 spacer 将按钮推到右侧
         spacer = QWidget()
         spacer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
@@ -1085,11 +1087,15 @@ class MainWindow(QMainWindow):
         note_manager = get_note_manager()
         skill_path = note_manager.skills_path / note_id / "SKILL.md"
 
+        # 获取笔记标题
+        note = note_manager.get_note(note_id)
+        note_title = note.title if note else ""
+
         # 显示进度提示
         self.notification_bar.show_progress("正在生成 SKILL.md...")
 
         # 创建工作线程
-        self._generator_worker = SkillGeneratorWorker(note_id, content, skill_path)
+        self._generator_worker = SkillGeneratorWorker(note_id, content, skill_path, note_title)
         self._generator_worker.finished.connect(self._on_skill_generated)
         self._generator_worker.start()
 

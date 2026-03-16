@@ -22,11 +22,58 @@ class AnthropicClient(AIClient):
     def _get_client(self) -> Anthropic:
         """获取或创建 Anthropic 客户端"""
         if self._client is None:
+            # 清理 API Key，移除可能导致 HTTP Header 错误的字符
+            clean_api_key = self._clean_api_key(self.api_key)
             self._client = Anthropic(
-                api_key=self.api_key,
+                api_key=clean_api_key,
                 base_url=self.base_url if self.base_url else None,
             )
         return self._client
+
+    def _clean_api_key(self, api_key: str) -> str:
+        """清理 API Key，移除非法字符
+
+        HTTP Header 只能包含 ASCII 字符，需要移除或替换非 ASCII 字符
+        """
+        if not api_key:
+            return api_key
+
+        # 移除常见的错误前缀（如 "公司:" 等）
+        import re
+        # 如果包含冒号，只取冒号后的部分
+        if ':' in api_key:
+            parts = api_key.split(':', 1)
+            if len(parts) == 2:
+                # 检查冒号前是否包含非 ASCII 字符
+                prefix = parts[0]
+                try:
+                    prefix.encode('ascii')
+                    # 前缀是 ASCII，可能是合法格式（如 "Bearer"）
+                    return api_key.strip()
+                except UnicodeEncodeError:
+                    # 前缀包含非 ASCII 字符，丢弃前缀
+                    api_key = parts[1].strip()
+
+        # 确保只保留 ASCII 字符
+        try:
+            # 尝试编码为 ASCII，如果失败则移除非 ASCII 字符
+            return api_key.encode('ascii', errors='ignore').decode('ascii')
+        except Exception:
+            return api_key.strip()
+
+    def _ensure_utf8_encoding(self, messages: list[dict[str, str]]) -> list[dict[str, str]]:
+        """确保消息编码为 UTF-8"""
+        encoded_messages = []
+        for msg in messages:
+            encoded_msg = {}
+            for key, value in msg.items():
+                if isinstance(value, str):
+                    # 确保字符串是 UTF-8 编码
+                    encoded_msg[key] = value.encode('utf-8').decode('utf-8')
+                else:
+                    encoded_msg[key] = value
+            encoded_messages.append(encoded_msg)
+        return encoded_messages
 
     def validate_config(self) -> bool:
         """验证配置是否有效"""
@@ -40,10 +87,13 @@ class AnthropicClient(AIClient):
         """发送聊天消息"""
         client = self._get_client()
 
+        # 确保消息编码正确
+        encoded_messages = self._ensure_utf8_encoding(messages)
+
         # 提取 system 消息
         system_message = ""
         chat_messages = []
-        for msg in messages:
+        for msg in encoded_messages:
             if msg["role"] == "system":
                 system_message = msg["content"]
             else:
@@ -75,10 +125,13 @@ class AnthropicClient(AIClient):
         """发送聊天消息（流式响应）"""
         client = self._get_client()
 
+        # 确保消息编码正确
+        encoded_messages = self._ensure_utf8_encoding(messages)
+
         # 提取 system 消息
         system_message = ""
         chat_messages = []
-        for msg in messages:
+        for msg in encoded_messages:
             if msg["role"] == "system":
                 system_message = msg["content"]
             else:

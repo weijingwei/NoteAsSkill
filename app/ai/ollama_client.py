@@ -31,6 +31,20 @@ class OllamaClient(AIClient):
         base = self.base_url.rstrip("/")
         return f"{base}/api/{endpoint}"
 
+    def _ensure_utf8_encoding(self, messages: list[dict[str, str]]) -> list[dict[str, str]]:
+        """确保消息编码为 UTF-8"""
+        encoded_messages = []
+        for msg in messages:
+            encoded_msg = {}
+            for key, value in msg.items():
+                if isinstance(value, str):
+                    # 确保字符串是 UTF-8 编码
+                    encoded_msg[key] = value.encode('utf-8').decode('utf-8')
+                else:
+                    encoded_msg[key] = value
+            encoded_messages.append(encoded_msg)
+        return encoded_messages
+
     def chat(
         self,
         messages: list[dict[str, str]],
@@ -39,9 +53,12 @@ class OllamaClient(AIClient):
         """发送聊天消息"""
         url = self._get_api_url("chat")
 
+        # 确保消息编码正确
+        encoded_messages = self._ensure_utf8_encoding(messages)
+
         payload = {
             "model": self.model,
-            "messages": messages,
+            "messages": encoded_messages,
             "stream": False,
             "options": {
                 "temperature": kwargs.get("temperature", 0.7),
@@ -63,9 +80,12 @@ class OllamaClient(AIClient):
         """发送聊天消息（流式响应）"""
         url = self._get_api_url("chat")
 
+        # 确保消息编码正确
+        encoded_messages = self._ensure_utf8_encoding(messages)
+
         payload = {
             "model": self.model,
-            "messages": messages,
+            "messages": encoded_messages,
             "stream": True,
             "options": {
                 "temperature": kwargs.get("temperature", 0.7),
