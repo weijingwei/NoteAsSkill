@@ -216,15 +216,15 @@ class Sidebar(QWidget):
 
         self.new_folder_btn = QPushButton()
         self.new_folder_btn.setToolTip("新建文件夹")
-        self.new_folder_btn.setFixedSize(28, 28)
+        self.new_folder_btn.setFixedSize(22, 22)
         self.new_folder_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.new_folder_btn.setStyleSheet("""
             QPushButton {
                 background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
                     stop:0 #D4A574, stop:1 #C49564);
                 border: none;
-                border-radius: 6px;
-                padding: 2px;
+                border-radius: 4px;
+                padding: 1px;
             }
             QPushButton:hover {
                 background: qlineargradient(x1:0, y1:0, x2:0, y2:1,

@@ -6,7 +6,7 @@
 from pathlib import Path
 from typing import Any
 
-from PySide6.QtCore import QSettings, Qt, Slot, QThread, Signal, QPoint, QTimer
+from PySide6.QtCore import QSettings, Qt, Slot, QThread, Signal, QPoint, QTimer, QSize
 from PySide6.QtGui import QAction, QFont, QIcon, QKeySequence, QPixmap, QPainter, QPolygon, QBrush, QColor
 from PySide6.QtWidgets import (
     QApplication,
@@ -349,6 +349,7 @@ class MainWindow(QMainWindow):
         self.sidebar_toolbar = QToolBar()
         self.sidebar_toolbar.setMovable(False)
         self.sidebar_toolbar.setFixedHeight(36)
+        self.sidebar_toolbar.setIconSize(QSize(16, 16))
         sidebar_layout.addWidget(self.sidebar_toolbar)
 
         # 添加展开/关闭侧边栏按钮
@@ -760,11 +761,11 @@ class MainWindow(QMainWindow):
                 background-color: transparent;
                 border: 1px solid transparent;
                 border-radius: 4px;
-                padding: 2px 6px;
+                padding: 2px 5px;
                 color: #5A4A3A;
                 font-size: 12px;
                 font-weight: 500;
-                min-height: 22px;
+                min-height: 24px;
             }
             QToolBar QToolButton:hover {
                 background-color: #FDF6ED;

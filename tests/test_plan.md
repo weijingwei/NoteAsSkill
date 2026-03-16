@@ -4,7 +4,7 @@
 - Python 环境: `D:\ProgramData\miniconda3\envs\noteasskill`
 - 应用路径: `D:\claudeProjects\note_as_skill\main.py`
 - 测试框架: 自定义测试框架 + pyautogui (UI自动化)
-- 版本: v0.2.72
+- 版本: v0.2.73
 
 ---
 
