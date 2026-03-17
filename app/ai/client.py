@@ -98,6 +98,17 @@ class AIClient(ABC):
         """
         pass
 
+    def list_models(self) -> list[str]:
+        """列出可用模型
+
+        子类可以重写此方法以提供真实的模型列表。
+        默认实现返回空列表。
+
+        Returns:
+            可用模型名称列表
+        """
+        return []
+
     def validate_config(self) -> bool:
         """验证配置是否有效
 

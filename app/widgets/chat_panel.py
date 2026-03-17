@@ -171,6 +171,7 @@ class NoBorderComboBox(QComboBox):
                     Qt.WindowType.FramelessWindowHint |
                     Qt.WindowType.NoDropShadowWindowHint
                 )
+
                 container.setContentsMargins(0, 0, 0, 0)
                 view.setGeometry(0, 0, container.width(), container.height())
                 container.show()
@@ -639,6 +640,7 @@ class ChatPanel(QWidget):
                 border: none;
                 padding: 0px;
                 outline: none;
+                max-height: 150px;
             }
             QListView::item {
                 padding: 6px 10px;
@@ -655,42 +657,6 @@ class ChatPanel(QWidget):
             }
         """)
         self.model_combo.setView(model_view)
-        self.model_combo.setStyleSheet("""
-            QComboBox {
-                background-color: transparent;
-                border: none;
-                padding: 4px 8px;
-                padding-right: 20px;
-                color: #8B7B6B;
-                font-size: 12px;
-                min-width: 80px;
-            }
-            QComboBox:hover {
-                color: #8B5A2B;
-            }
-            QComboBox::drop-down {
-                border: none;
-                width: 16px;
-            }
-            QComboBox QAbstractItemView {
-                background-color: #FFFEF9;
-                border: 1px solid #E8DFD5;
-                border-radius: 4px;
-                padding: 4px 0px;
-                selection-background-color: #FDF6ED;
-                selection-color: #8B5A2B;
-                outline: none;
-            }
-            QComboBox QAbstractItemView::item {
-                padding: 6px 10px;
-                min-height: 24px;
-                background-color: #FFFEF9;
-                color: #5A4A3A;
-            }
-            QComboBox QAbstractItemView::item:hover {
-                background-color: #FDF8F0;
-            }
-        """)
         bottom_toolbar.addWidget(self.model_combo)
 
         bottom_toolbar.addStretch()
@@ -712,40 +678,6 @@ class ChatPanel(QWidget):
         """)
         bottom_toolbar.addWidget(self.image_btn)
 
-        # Chat 按钮
-        self.chat_btn = QPushButton("💬 Chat")
-        self.chat_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.chat_btn.setStyleSheet("""
-            QPushButton {
-                background-color: transparent;
-                border: none;
-                color: #8B7B6B;
-                font-size: 12px;
-                padding: 4px 8px;
-            }
-            QPushButton:hover {
-                color: #8B5A2B;
-            }
-        """)
-        bottom_toolbar.addWidget(self.chat_btn)
-
-        # Vault Chat 按钮
-        self.vault_chat_btn = QPushButton("🔒 Vault Chat")
-        self.vault_chat_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.vault_chat_btn.setStyleSheet("""
-            QPushButton {
-                background-color: transparent;
-                border: none;
-                color: #8B7B6B;
-                font-size: 12px;
-                padding: 4px 8px;
-            }
-            QPushButton:hover {
-                color: #8B5A2B;
-            }
-        """)
-        bottom_toolbar.addWidget(self.vault_chat_btn)
-
         input_layout.addLayout(bottom_toolbar)
         layout.addWidget(input_container)
 
@@ -759,23 +691,25 @@ class ChatPanel(QWidget):
         ai_config = config.get_ai_config(provider)
         current_model = ai_config.get("model", "")
 
-        # 根据提供商添加预设模型
-        model_presets = {
-            "openai": ["gpt-4", "gpt-4-turbo", "gpt-3.5-turbo"],
-            "anthropic": ["claude-3-opus-20240229", "claude-3-sonnet-20240229", "claude-3-haiku-20240307"],
-            "ollama": ["llama2", "llama3", "mistral", "codellama"],
-        }
+        models = []
 
-        models = model_presets.get(provider, [])
-        if current_model and current_model not in models:
-            models.insert(0, current_model)
+        if self._client is not None:
+            try:
+                api_models = self._client.list_models()
+                if api_models:
+                    models = api_models
+            except Exception:
+                pass
 
-        # 使用 blockSignals 代替 disconnect/connect，更安全
         self.model_combo.blockSignals(True)
         self.model_combo.clear()
-        self.model_combo.addItems(models)
+        if models:
+            self.model_combo.addItems(models)
         if current_model:
-            self.model_combo.setCurrentText(current_model)
+            if models and current_model not in models:
+                self.model_combo.setCurrentText(current_model)
+            elif not models:
+                self.model_combo.setCurrentText(current_model)
         self.model_combo.blockSignals(False)
 
     def _connect_signals(self) -> None:

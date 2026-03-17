@@ -145,3 +145,21 @@ class AnthropicClient(AIClient):
         ) as stream:
             for text in stream.text_stream:
                 yield text
+
+    def list_models(self) -> list[str]:
+        """列出可用的模型
+
+        Anthropic 没有公开的模型列表 API，这里返回已知的模型列表。
+        实际可用模型请参考 Anthropic 官方文档。
+        """
+        return [
+            "claude-sonnet-4-20250514",
+            "claude-sonnet-4-20250507",
+            "claude-3-5-sonnet-20240620",
+            "claude-3-5-sonnet-20241022",
+            "claude-3-5-haiku-20241022",
+            "claude-3-5-haiku-20240620",
+            "claude-3-opus-20240229",
+            "claude-3-sonnet-20240229",
+            "claude-3-haiku-20240307",
+        ]

@@ -40,6 +40,7 @@ from PySide6.QtWidgets import (
 from ..core.config import get_config
 from ..core.system_config import get_system_config_instance
 from ..mcp.client import validate_mcp_server_config, test_mcp_server_connection, parse_mcp_config
+from ..ai.client import create_client
 
 
 class NoBorderComboBox(QComboBox):
@@ -1117,17 +1118,34 @@ class SettingsDialog(QDialog):
             provider = self.provider_combo.currentText()
 
         base_url = self.base_url_input.text()
+        api_key = self.api_key_input.text()
         current_text = self.model_combo.currentText()
 
-        # 根据 base_url 获取模型列表
-        models = self._get_models_for_url(base_url)
+        models = []
 
-        # 如果当前文本不在列表中，保留它（支持自定义模型）
-        if current_text and current_text not in models:
-            models = [current_text] + models
+        if base_url and api_key:
+            try:
+                client = create_client(provider, {
+                    "api_key": api_key,
+                    "base_url": base_url,
+                    "model": current_text or "gpt-4"
+                })
+                api_models = client.list_models()
+                if api_models:
+                    models = api_models
+            except Exception:
+                pass
 
+        self.model_combo.blockSignals(True)
         self.model_combo.clear()
-        self.model_combo.addItems(models)
+        if models:
+            self.model_combo.addItems(models)
+        if current_text:
+            if models and current_text not in models:
+                self.model_combo.setCurrentText(current_text)
+            elif not models:
+                self.model_combo.setCurrentText(current_text)
+        self.model_combo.blockSignals(False)
 
     def _on_ai_config_changed(self) -> None:
         pass

@@ -146,3 +146,15 @@ class OpenAIClient(AIClient):
         except Exception as e:
             # 包装异常，添加更多信息
             raise Exception(f"API调用失败: {type(e).__name__}: {repr(e)}") from e
+
+    def list_models(self) -> list[str]:
+        """列出可用的模型"""
+        client = self._get_client()
+
+        try:
+            response = client.models.list()
+            models = [model.id for model in response.data]
+            models.sort()
+            return models
+        except Exception:
+            return []
