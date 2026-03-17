@@ -531,50 +531,28 @@ class ChatPanel(QWidget):
         self.message_list.customContextMenuRequested.connect(self._show_message_context_menu)
         layout.addWidget(self.message_list, 1)
 
-        # ========== 输入区域（深色主题） ==========
+        # ========== 输入区域（温暖主题） ==========
         input_container = QFrame()
         input_container.setStyleSheet("""
             QFrame {
-                background-color: #2D2D2D;
-                border-radius: 8px;
+                background-color: #FFFEF9;
+                border: 1px solid #E8DFD5;
+                border-radius: 12px;
             }
         """)
         input_layout = QVBoxLayout(input_container)
         input_layout.setContentsMargins(12, 10, 12, 10)
         input_layout.setSpacing(8)
 
-        # ---- 输入框内部顶部工具栏（Tools、笔记显示） ----
+        # ---- 输入框内部顶部工具栏（笔记显示） ----
         input_top_toolbar = QHBoxLayout()
         input_top_toolbar.setSpacing(8)
-
-        # Tools 按钮
-        self.tools_btn = QPushButton("🔧 Tools")
-        self.tools_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.tools_btn.setStyleSheet("""
-            QPushButton {
-                background-color: transparent;
-                border: none;
-                color: #CCCCCC;
-                font-size: 12px;
-                padding: 2px 6px;
-            }
-            QPushButton:hover {
-                color: #FFFFFF;
-            }
-        """)
-        self.tools_btn.clicked.connect(self._on_mcp_tools_clicked)
-        input_top_toolbar.addWidget(self.tools_btn)
-
-        # 分隔线
-        separator1 = QLabel("|")
-        separator1.setStyleSheet("color: #555555; font-size: 12px;")
-        input_top_toolbar.addWidget(separator1)
 
         # 当前文件/笔记显示
         self.current_file_label = QLabel("📄 未选择笔记")
         self.current_file_label.setStyleSheet("""
             QLabel {
-                color: #CCCCCC;
+                color: #8B7B6B;
                 font-size: 12px;
             }
         """)
@@ -589,14 +567,14 @@ class ChatPanel(QWidget):
             QToolButton {
                 background-color: transparent;
                 border: none;
-                color: #888888;
+                color: #8B7B6B;
                 font-size: 12px;
             }
             QToolButton:checked {
                 color: #D4A574;
             }
             QToolButton:hover {
-                color: #FFFFFF;
+                color: #8B5A2B;
             }
         """)
         self.eye_btn.setText("📌")
@@ -610,11 +588,11 @@ class ChatPanel(QWidget):
             QToolButton {
                 background-color: transparent;
                 border: none;
-                color: #888888;
+                color: #8B7B6B;
                 font-size: 12px;
             }
             QToolButton:hover {
-                color: #FF6B6B;
+                color: #C75450;
             }
         """)
         self.close_note_btn.setText("✕")
@@ -630,15 +608,20 @@ class ChatPanel(QWidget):
         self.input_edit.setPlaceholderText("输入消息...")
         self.input_edit.setStyleSheet("""
             QTextEdit {
-                background-color: #3D3D3D;
-                border: 1px solid #4D4D4D;
-                border-radius: 6px;
+                background-color: #FFFEF9;
+                border: 2px solid #E8DFD5;
+                border-radius: 10px;
                 font-size: 13px;
-                color: #FFFFFF;
-                padding: 8px;
+                color: #3D3428;
+                padding: 10px 16px;
+                line-height: 1.6;
             }
             QTextEdit:focus {
                 border-color: #D4A574;
+                background-color: #FFFDF8;
+            }
+            QTextEdit:hover {
+                border-color: #D4C4B0;
             }
         """)
         input_layout.addWidget(self.input_edit)
@@ -652,7 +635,7 @@ class ChatPanel(QWidget):
         model_view = QListView()
         model_view.setStyleSheet("""
             QListView {
-                background-color: #3D3D3D;
+                background-color: #FFFEF9;
                 border: none;
                 padding: 0px;
                 outline: none;
@@ -660,15 +643,15 @@ class ChatPanel(QWidget):
             QListView::item {
                 padding: 6px 10px;
                 min-height: 24px;
-                background-color: #3D3D3D;
-                color: #CCCCCC;
+                background-color: #FFFEF9;
+                color: #5A4A3A;
             }
             QListView::item:hover {
-                background-color: #4D4D4D;
+                background-color: #FDF8F0;
             }
             QListView::item:selected {
-                background-color: #D4A574;
-                color: #FFFFFF;
+                background-color: #FDF6ED;
+                color: #8B5A2B;
             }
         """)
         self.model_combo.setView(model_view)
@@ -678,34 +661,34 @@ class ChatPanel(QWidget):
                 border: none;
                 padding: 4px 8px;
                 padding-right: 20px;
-                color: #CCCCCC;
+                color: #8B7B6B;
                 font-size: 12px;
                 min-width: 80px;
             }
             QComboBox:hover {
-                color: #FFFFFF;
+                color: #8B5A2B;
             }
             QComboBox::drop-down {
                 border: none;
                 width: 16px;
             }
             QComboBox QAbstractItemView {
-                background-color: #3D3D3D;
-                border: 1px solid #4D4D4D;
+                background-color: #FFFEF9;
+                border: 1px solid #E8DFD5;
                 border-radius: 4px;
                 padding: 4px 0px;
-                selection-background-color: #D4A574;
-                selection-color: #FFFFFF;
+                selection-background-color: #FDF6ED;
+                selection-color: #8B5A2B;
                 outline: none;
             }
             QComboBox QAbstractItemView::item {
                 padding: 6px 10px;
                 min-height: 24px;
-                background-color: #3D3D3D;
-                color: #CCCCCC;
+                background-color: #FFFEF9;
+                color: #5A4A3A;
             }
             QComboBox QAbstractItemView::item:hover {
-                background-color: #4D4D4D;
+                background-color: #FDF8F0;
             }
         """)
         bottom_toolbar.addWidget(self.model_combo)
@@ -719,12 +702,12 @@ class ChatPanel(QWidget):
             QPushButton {
                 background-color: transparent;
                 border: none;
-                color: #888888;
+                color: #8B7B6B;
                 font-size: 12px;
                 padding: 4px 8px;
             }
             QPushButton:hover {
-                color: #FFFFFF;
+                color: #8B5A2B;
             }
         """)
         bottom_toolbar.addWidget(self.image_btn)
@@ -736,12 +719,12 @@ class ChatPanel(QWidget):
             QPushButton {
                 background-color: transparent;
                 border: none;
-                color: #888888;
+                color: #8B7B6B;
                 font-size: 12px;
                 padding: 4px 8px;
             }
             QPushButton:hover {
-                color: #FFFFFF;
+                color: #8B5A2B;
             }
         """)
         bottom_toolbar.addWidget(self.chat_btn)
@@ -753,12 +736,12 @@ class ChatPanel(QWidget):
             QPushButton {
                 background-color: transparent;
                 border: none;
-                color: #888888;
+                color: #8B7B6B;
                 font-size: 12px;
                 padding: 4px 8px;
             }
             QPushButton:hover {
-                color: #FFFFFF;
+                color: #8B5A2B;
             }
         """)
         bottom_toolbar.addWidget(self.vault_chat_btn)
@@ -768,7 +751,6 @@ class ChatPanel(QWidget):
 
         # 初始化
         self._load_model_list()
-        self._update_tools_button()
 
     def _load_model_list(self) -> None:
         """加载模型列表"""
@@ -882,33 +864,9 @@ class ChatPanel(QWidget):
         """更新模型显示"""
         self._load_model_list()
 
-    def _update_tools_button(self) -> None:
-        """更新 Tools 按钮状态"""
-        tools = self._mcp_manager.get_all_tools()
-        selected_count = len(self._selected_mcp_tools)
-        total_count = len(tools)
-
-        if total_count == 0:
-            self.tools_btn.setText("🔧 Tools")
-            self.tools_btn.setEnabled(False)
-        else:
-            if selected_count == 0:
-                self.tools_btn.setText(f"🔧 Tools ({total_count})")
-            else:
-                self.tools_btn.setText(f"🔧 Tools ({selected_count}/{total_count})")
-            self.tools_btn.setEnabled(True)
-
-    def _on_mcp_tools_clicked(self) -> None:
-        """Tools 按钮点击"""
-        tools = self._mcp_manager.get_all_tools()
-        dialog = MCPToolsDialog(tools, self._selected_mcp_tools, self)
-        if dialog.exec() == QDialog.DialogCode.Accepted:
-            self._selected_mcp_tools = dialog.get_selected_tools()
-            self._update_tools_button()
-
     def _on_mcp_tools_updated(self, server_name: str, tools: list) -> None:
         """MCP 工具更新"""
-        self._update_tools_button()
+        pass
 
     def _on_eye_toggled(self) -> None:
         """眼睛按钮切换"""
@@ -917,14 +875,14 @@ class ChatPanel(QWidget):
             if self._use_note_context:
                 self.current_file_label.setStyleSheet("""
                     QLabel {
-                        color: #CCCCCC;
+                        color: #5A4A3A;
                         font-size: 12px;
                     }
                 """)
             else:
                 self.current_file_label.setStyleSheet("""
                     QLabel {
-                        color: #666666;
+                        color: #8B7B6B;
                         font-size: 12px;
                     }
                 """)
@@ -1126,7 +1084,7 @@ class ChatPanel(QWidget):
             self.current_file_label.setText(f"📄 {title}")
             self.current_file_label.setStyleSheet("""
                 QLabel {
-                    color: #CCCCCC;
+                    color: #5A4A3A;
                     font-size: 12px;
                 }
             """)
@@ -1134,7 +1092,7 @@ class ChatPanel(QWidget):
             self.current_file_label.setText("📄 未选择笔记")
             self.current_file_label.setStyleSheet("""
                 QLabel {
-                    color: #666666;
+                    color: #8B7B6B;
                     font-size: 12px;
                 }
             """)
