@@ -254,7 +254,7 @@ class ModelSelector(QWidget):
                 padding: 4px 20px 4px 8px;
                 color: #4A3F35;
                 font-size: 12px;
-                min-width: 140px;
+                min-width: 100px;
                 text-align: left;
             }
             QToolButton:hover {
@@ -324,7 +324,7 @@ class ModelSelector(QWidget):
                 padding: 4px 20px 4px 8px;
                 color: #8B5A2B;
                 font-size: 12px;
-                min-width: 140px;
+                min-width: 100px;
                 text-align: left;
             }
             QToolButton:hover {
@@ -526,6 +526,204 @@ class ModelSelector(QWidget):
         return super().eventFilter(obj, event)
 
 
+class MCPToolSelector(QWidget):
+    """MCP 工具选择器 - 多选下拉组件（参考 ModelSelector 实现）"""
+
+    tools_changed = Signal(list)  # 选中工具名称列表
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._tool_names: list[str] = []  # 工具名称列表
+        self._selected: set[str] = set()  # 选中的工具名称
+        self._popup: QFrame | None = None
+        self._list_widget: QListWidget | None = None
+        self._init_ui()
+
+    def _init_ui(self) -> None:
+        """初始化界面"""
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+
+        # 主按钮
+        self._button = QToolButton()
+        self._button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._button.setStyleSheet("""
+            QToolButton {
+                background-color: #FFFEF9;
+                border: 1px solid #E8DFD5;
+                border-radius: 4px;
+                padding: 4px 16px 4px 8px;
+                color: #4A3F35;
+                font-size: 12px;
+                min-width: 70px;
+                text-align: center;
+            }
+            QToolButton:hover {
+                border-color: #D4A574;
+                background-color: #FDF8F0;
+            }
+        """)
+        self._button.clicked.connect(self._show_popup)
+        layout.addWidget(self._button)
+
+        self._update_button_text()
+
+    def _update_button_text(self) -> None:
+        """更新按钮文本"""
+        count = len(self._selected)
+        if count == 0:
+            self._button.setText("工具")
+        else:
+            self._button.setText(f"工具({count})")
+
+    def set_tools(self, tool_names: list[str]) -> None:
+        """设置工具名称列表"""
+        self._tool_names = list(tool_names)
+        # 保留仍然存在的选中项
+        self._selected = self._selected & set(tool_names)
+        self._update_button_text()
+
+    def get_selected(self) -> list[str]:
+        """获取选中的工具名称列表"""
+        return list(self._selected)
+
+    def _show_popup(self) -> None:
+        """显示弹出列表"""
+        self._close_popup()
+
+        # 创建弹出容器
+        self._popup = QFrame(self, Qt.WindowType.Popup)
+        self._popup.setWindowFlags(
+            Qt.WindowType.Popup |
+            Qt.WindowType.FramelessWindowHint |
+            Qt.WindowType.NoDropShadowWindowHint
+        )
+        self._popup.setStyleSheet("""
+            QFrame {
+                background-color: #FFFEF9;
+                border: 1px solid #E8DFD5;
+                border-radius: 6px;
+            }
+        """)
+
+        layout = QVBoxLayout(self._popup)
+        layout.setContentsMargins(6, 6, 6, 6)
+        layout.setSpacing(4)
+
+        if not self._tool_names:
+            # 无工具提示
+            label = QLabel("暂无可用工具")
+            label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            label.setStyleSheet("color: #8B7B6B; font-size: 12px; padding: 10px;")
+            layout.addWidget(label)
+        else:
+            # 工具列表（带复选框）
+            self._list_widget = QListWidget()
+            self._list_widget.setMaximumHeight(200)
+            self._list_widget.setStyleSheet("""
+                QListWidget {
+                    background-color: #FFFEF9;
+                    border: none;
+                    outline: none;
+                }
+                QListWidget::item {
+                    padding: 6px 8px;
+                    color: #3D3428;
+                    font-size: 12px;
+                    border-radius: 4px;
+                }
+                QListWidget::item:hover {
+                    background-color: #FDF8F0;
+                }
+            """)
+
+            for name in self._tool_names:
+                item = QListWidgetItem()
+                item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+                item.setCheckState(
+                    Qt.CheckState.Checked if name in self._selected else Qt.CheckState.Unchecked
+                )
+                item.setText(name)
+                item.setData(Qt.ItemDataRole.UserRole, name)
+                self._list_widget.addItem(item)
+
+            self._list_widget.itemClicked.connect(self._on_item_clicked)
+            layout.addWidget(self._list_widget)
+
+            # 确定按钮
+            confirm_btn = QPushButton("确定")
+            confirm_btn.setStyleSheet("""
+                QPushButton {
+                    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                        stop:0 #D4A574, stop:1 #C49564);
+                    color: #FFFEF9;
+                    border: none;
+                    border-radius: 4px;
+                    padding: 6px 16px;
+                    font-size: 12px;
+                }
+                QPushButton:hover {
+                    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                        stop:0 #C49564, stop:1 #B48554);
+                }
+            """)
+            confirm_btn.clicked.connect(self._on_confirm)
+            layout.addWidget(confirm_btn)
+
+        # 定位弹出窗口
+        button_rect = self._button.rect()
+        popup_pos = self._button.mapToGlobal(button_rect.bottomLeft())
+        popup_pos.setY(popup_pos.y() + 2)
+        self._popup.move(popup_pos)
+        self._popup.setFixedWidth(220)
+        self._popup.adjustSize()
+        self._popup.show()
+
+        # 安装事件过滤器
+        self._popup.installEventFilter(self)
+
+    def _close_popup(self) -> None:
+        """关闭弹出窗口"""
+        if self._popup:
+            self._popup.close()
+            self._popup.deleteLater()
+            self._popup = None
+            self._list_widget = None
+
+    def _on_item_clicked(self, item: QListWidgetItem) -> None:
+        """切换项的选中状态"""
+        # 点击时切换复选框状态
+        if item.checkState() == Qt.CheckState.Checked:
+            item.setCheckState(Qt.CheckState.Unchecked)
+        else:
+            item.setCheckState(Qt.CheckState.Checked)
+
+    def _on_confirm(self) -> None:
+        """确认选择"""
+        if self._list_widget:
+            self._selected = set()
+            for i in range(self._list_widget.count()):
+                item = self._list_widget.item(i)
+                if item.checkState() == Qt.CheckState.Checked:
+                    name = item.data(Qt.ItemDataRole.UserRole)
+                    self._selected.add(name)
+
+        self._update_button_text()
+        self._close_popup()
+        self.tools_changed.emit(list(self._selected))
+
+    def eventFilter(self, obj, event) -> bool:
+        """事件过滤器"""
+        if obj == self._popup and event.type() == QEvent.Type.MouseButtonPress:
+            popup_rect = self._popup.rect()
+            popup_rect.moveTo(self._popup.mapToGlobal(popup_rect.topLeft()))
+            if not popup_rect.contains(event.globalPosition().toPoint()):
+                self._close_popup()
+                return True
+        return super().eventFilter(obj, event)
+
+
 class StreamChatWorker(QThread):
     """流式 AI 聊天工作线程"""
 
@@ -533,27 +731,110 @@ class StreamChatWorker(QThread):
     thinking_started = Signal()
     thinking_ended = Signal()
     finished_with_error = Signal(str)
+    tool_call_started = Signal(str, dict)  # tool_name, arguments
+    tool_call_result = Signal(str, str, bool)  # tool_name, result, is_error
 
-    def __init__(self, client: Any, messages: list[dict[str, str]], use_stream: bool = True):
+    def __init__(
+        self,
+        client: Any,
+        messages: list[dict[str, str]],
+        tools: list[MCPTool] | None = None,
+        mcp_manager: MCPManager | None = None,
+        use_stream: bool = True,
+    ):
         super().__init__()
         self.client = client
         self.messages = messages
+        self.tools = tools or []
+        self.mcp_manager = mcp_manager
         self.use_stream = use_stream
 
     def run(self) -> None:
         try:
-            if self.use_stream:
+            # 构建工具 schema
+            from ..ai.client import MCPToolSchema
+            tool_schemas = [
+                MCPToolSchema(
+                    name=tool.name,
+                    description=tool.description,
+                    input_schema=tool.input_schema,
+                )
+                for tool in self.tools
+            ] if self.tools else None
+
+            # 工具调用循环
+            current_messages = list(self.messages)
+            max_iterations = 10  # 防止无限循环
+
+            for iteration in range(max_iterations):
                 self.thinking_started.emit()
-                full_response = ""
-                for chunk in self.client.chat_stream(self.messages):
-                    full_response += chunk
-                    self.chunk_received.emit(chunk)
-                self.thinking_ended.emit()
-            else:
-                self.thinking_started.emit()
-                response = self.client.chat(self.messages)
-                self.thinking_ended.emit()
-                self.chunk_received.emit(response)
+
+                if self.use_stream:
+                    full_content = ""
+                    tool_calls = None
+
+                    for response in self.client.chat_stream(current_messages, tool_schemas):
+                        if response.content:
+                            full_content += response.content
+                            self.chunk_received.emit(response.content)
+                        if response.tool_calls:
+                            tool_calls = response.tool_calls
+
+                    self.thinking_ended.emit()
+
+                    # 检查是否有工具调用
+                    if tool_calls:
+                        # 执行工具调用
+                        tool_results = self._execute_tool_calls(tool_calls)
+
+                        # 更新消息历史
+                        current_messages.append({
+                            "role": "assistant",
+                            "content": full_content,
+                            "tool_calls": [
+                                {"id": tc.id, "type": "function", "function": {"name": tc.name, "arguments": str(tc.arguments)}}
+                                for tc in tool_calls
+                            ]
+                        })
+
+                        for result in tool_results:
+                            current_messages.append({
+                                "role": "tool",
+                                "tool_call_id": result.tool_call_id,
+                                "content": result.content,
+                            })
+
+                        # 继续循环，让 AI 处理工具结果
+                        continue
+                    else:
+                        # 没有工具调用，结束
+                        break
+                else:
+                    response = self.client.chat(current_messages, tool_schemas)
+                    self.thinking_ended.emit()
+
+                    if response.content:
+                        self.chunk_received.emit(response.content)
+
+                    if response.tool_calls:
+                        tool_results = self._execute_tool_calls(response.tool_calls)
+
+                        current_messages.append({
+                            "role": "assistant",
+                            "content": response.content,
+                        })
+
+                        for result in tool_results:
+                            current_messages.append({
+                                "role": "tool",
+                                "tool_call_id": result.tool_call_id,
+                                "content": result.content,
+                            })
+
+                        continue
+                    else:
+                        break
+
         except Exception as e:
             # 处理编码错误
             try:
@@ -561,6 +842,45 @@ class StreamChatWorker(QThread):
             except UnicodeEncodeError:
                 error_msg = repr(e)
             self.finished_with_error.emit(error_msg)
+
+    def _execute_tool_calls(self, tool_calls: list) -> list:
+        """执行工具调用"""
+        from ..ai.client import ToolResult
+
+        results = []
+        if not self.mcp_manager:
+            return results
+
+        for tool_call in tool_calls:
+            self.tool_call_started.emit(tool_call.name, tool_call.arguments)
+
+            try:
+                # 调用 MCP 工具
+                content, is_error = self.mcp_manager.call_tool(
+                    tool_call.name,
+                    tool_call.arguments
+                )
+
+                result = ToolResult(
+                    tool_call_id=tool_call.id,
+                    name=tool_call.name,
+                    content=content,
+                    is_error=is_error,
+                )
+                self.tool_call_result.emit(tool_call.name, content, is_error)
+                results.append(result)
+
+            except Exception as e:
+                result = ToolResult(
+                    tool_call_id=tool_call.id,
+                    name=tool_call.name,
+                    content=f"Error: {str(e)}",
+                    is_error=True,
+                )
+                self.tool_call_result.emit(tool_call.name, result.content, True)
+                results.append(result)
+
+        return results
 
 
 class MCPToolsDialog(QDialog):
@@ -701,6 +1021,7 @@ class ChatPanel(QWidget):
         self._connect_signals()
         self._load_client()
         self._load_model_list()
+        self._load_mcp_servers()
 
     def _init_ui(self) -> None:
         """初始化界面 - 参考截图设计"""
@@ -887,6 +1208,10 @@ class ChatPanel(QWidget):
         """)
         input_top_toolbar.addWidget(self.current_file_label)
 
+        # 图钉和关闭按钮容器（紧凑排列）
+        note_controls = QHBoxLayout()
+        note_controls.setSpacing(2)
+
         # 图钉图标（切换是否使用笔记上下文）
         self.eye_btn = QToolButton()
         self.eye_btn.setCheckable(True)
@@ -908,7 +1233,7 @@ class ChatPanel(QWidget):
         """)
         self.eye_btn.setText("📌")
         self.eye_btn.clicked.connect(self._on_eye_toggled)
-        input_top_toolbar.addWidget(self.eye_btn)
+        note_controls.addWidget(self.eye_btn)
 
         # 关闭按钮（清除当前笔记引用）
         self.close_note_btn = QToolButton()
@@ -926,9 +1251,17 @@ class ChatPanel(QWidget):
         """)
         self.close_note_btn.setText("✕")
         self.close_note_btn.clicked.connect(self._on_close_note)
-        input_top_toolbar.addWidget(self.close_note_btn)
+        note_controls.addWidget(self.close_note_btn)
+
+        input_top_toolbar.addLayout(note_controls)
 
         input_top_toolbar.addStretch()
+
+        # MCP 工具选择器（放在右上角）
+        self.mcp_tool_selector = MCPToolSelector()
+        self.mcp_tool_selector.setMinimumWidth(100)
+        input_top_toolbar.addWidget(self.mcp_tool_selector)
+
         input_layout.addLayout(input_top_toolbar)
 
         # ---- 输入框 ----
@@ -961,7 +1294,7 @@ class ChatPanel(QWidget):
 
         # 模型选择器
         self.model_selector = ModelSelector()
-        self.model_selector.setMinimumWidth(160)
+        self.model_selector.setMinimumWidth(120)
         bottom_toolbar.addWidget(self.model_selector)
 
         bottom_toolbar.addStretch()
@@ -991,8 +1324,43 @@ class ChatPanel(QWidget):
         self._mcp_manager.tools_updated.connect(self._on_mcp_tools_updated)
         self.mode_combo.currentTextChanged.connect(self._on_mode_changed)
         self.model_selector.model_changed.connect(self._on_model_changed)
+        self.mcp_tool_selector.tools_changed.connect(self._on_mcp_tools_changed)
         # 输入框回车键发送（Ctrl+Enter 换行）
         self.input_edit.installEventFilter(self)
+
+    def _init_mcp_tools(self) -> None:
+        """初始化 MCP 工具列表"""
+        tool_names: list[str] = []
+        servers = self._mcp_manager.get_servers()
+
+        for server_name, server in servers.items():
+            for tool in server.tools:
+                tool_names.append(tool.name)
+
+        self.mcp_tool_selector.set_tools(tool_names)
+
+    def _load_mcp_servers(self) -> None:
+        """加载并启动 MCP 服务器"""
+        config = get_config()
+        mcp_config = config.get("mcp", {})
+
+        if not mcp_config.get("enabled", False):
+            return
+
+        servers_config = mcp_config.get("servers", {})
+
+        if not servers_config:
+            return
+
+        # 加载服务器配置
+        self._mcp_manager.load_servers(servers_config)
+
+        # 启动所有服务器
+        self._mcp_manager.start_all_servers()
+
+    def _on_mcp_tools_changed(self, selected_tools: list[str]) -> None:
+        """MCP 工具选择改变"""
+        self._selected_mcp_tools = selected_tools
 
     def _on_model_changed(self, model: str) -> None:
         """模型改变"""
@@ -1126,7 +1494,10 @@ class ChatPanel(QWidget):
 
     def _on_mcp_tools_updated(self, server_name: str, tools: list) -> None:
         """MCP 工具更新"""
-        pass
+        # 直接从 manager 获取所有工具并更新选择器
+        all_tools = self._mcp_manager.get_all_tools()
+        tool_names = [tool.name for tool in all_tools]
+        self.mcp_tool_selector.set_tools(tool_names)
 
     def _on_eye_toggled(self) -> None:
         """眼睛按钮切换"""
@@ -1268,13 +1639,45 @@ class ChatPanel(QWidget):
 请基于以上笔记内容回答用户的问题。如果问题与笔记无关，请正常回答用户的问题。"""
             messages = [{"role": "system", "content": context}] + messages
 
-        self._worker = StreamChatWorker(self._client, messages, use_stream=True)
+        # 获取选中的工具
+        selected_tools = self._get_selected_mcp_tools()
+
+        self._worker = StreamChatWorker(
+            self._client,
+            messages,
+            tools=selected_tools,
+            mcp_manager=self._mcp_manager,
+            use_stream=True,
+        )
         self._worker.thinking_started.connect(lambda: None)
         self._worker.thinking_ended.connect(self._hide_thinking)
         self._worker.chunk_received.connect(self._on_chunk_received)
+        self._worker.tool_call_started.connect(self._on_tool_call_started)
+        self._worker.tool_call_result.connect(self._on_tool_call_result)
         self._worker.finished_with_error.connect(self._on_error)
         self._worker.finished.connect(self._on_stream_finished)
         self._worker.start()
+
+    def _get_selected_mcp_tools(self) -> list[MCPTool]:
+        """获取选中的 MCP 工具列表"""
+        selected_names = set(self._selected_mcp_tools)
+        tools = []
+        for server in self._mcp_manager.get_servers().values():
+            for tool in server.tools:
+                if tool.name in selected_names:
+                    tools.append(tool)
+        return tools
+
+    @Slot(str, dict)
+    def _on_tool_call_started(self, tool_name: str, arguments: dict) -> None:
+        """工具调用开始"""
+        self._add_message("系统", f"🔧 调用工具: {tool_name}", is_user=False)
+
+    @Slot(str, str, bool)
+    def _on_tool_call_result(self, tool_name: str, result: str, is_error: bool) -> None:
+        """工具调用结果"""
+        status = "❌" if is_error else "✅"
+        self._add_message("系统", f"{status} {tool_name}: {result[:200]}{'...' if len(result) > 200 else ''}", is_user=False)
 
     @Slot(str)
     def _on_chunk_received(self, chunk: str) -> None:

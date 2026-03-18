@@ -7,7 +7,7 @@ from typing import Any, Iterator
 import httpx
 from openai import OpenAI
 
-from .client import AIClient
+from .client import AIClient, ChatResponse, MCPToolSchema, ToolCall
 
 # 设置环境变量确保 UTF-8 编码
 os.environ['PYTHONIOENCODING'] = 'utf-8'
@@ -100,49 +100,152 @@ class OpenAIClient(AIClient):
         """验证配置是否有效"""
         return bool(self.api_key and self.model)
 
+    def _format_tools_for_api(self, tools: list[MCPToolSchema] | None) -> list[dict] | None:
+        """将工具列表转换为 OpenAI API 格式"""
+        if not tools:
+            return None
+        return [
+            {
+                "type": "function",
+                "function": {
+                    "name": tool.name,
+                    "description": tool.description,
+                    "parameters": tool.input_schema,
+                }
+            }
+            for tool in tools
+        ]
+
     def chat(
         self,
         messages: list[dict[str, str]],
+        tools: list[MCPToolSchema] | None = None,
         **kwargs: Any,
-    ) -> str:
+    ) -> ChatResponse:
         """发送聊天消息"""
         client = self._get_client()
 
         # 确保消息编码正确
         encoded_messages = self._ensure_utf8_encoding(messages)
 
-        response = client.chat.completions.create(
-            model=self.model,
-            messages=encoded_messages,
-            temperature=kwargs.get("temperature", 0.7),
-            max_tokens=kwargs.get("max_tokens", 4096),
-        )
+        api_params = {
+            "model": self.model,
+            "messages": encoded_messages,
+            "temperature": kwargs.get("temperature", 0.7),
+            "max_tokens": kwargs.get("max_tokens", 4096),
+        }
 
-        return response.choices[0].message.content or ""
+        # 添加工具参数
+        formatted_tools = self._format_tools_for_api(tools)
+        if formatted_tools:
+            api_params["tools"] = formatted_tools
+
+        response = client.chat.completions.create(**api_params)
+
+        # 处理响应
+        message = response.choices[0].message
+        content = message.content or ""
+
+        # 检查是否有工具调用
+        tool_calls = None
+        finish_reason = response.choices[0].finish_reason or "stop"
+
+        if message.tool_calls:
+            tool_calls = [
+                ToolCall(
+                    id=tc.id,
+                    name=tc.function.name,
+                    arguments=eval(tc.function.arguments) if isinstance(tc.function.arguments, str) else tc.function.arguments,
+                )
+                for tc in message.tool_calls
+            ]
+            finish_reason = "tool_calls"
+
+        return ChatResponse(
+            content=content,
+            tool_calls=tool_calls,
+            finish_reason=finish_reason,
+        )
 
     def chat_stream(
         self,
         messages: list[dict[str, str]],
+        tools: list[MCPToolSchema] | None = None,
         **kwargs: Any,
-    ) -> Iterator[str]:
+    ) -> Iterator[ChatResponse]:
         """发送聊天消息（流式响应）"""
         client = self._get_client()
 
         # 确保消息编码正确
         encoded_messages = self._ensure_utf8_encoding(messages)
 
+        api_params = {
+            "model": self.model,
+            "messages": encoded_messages,
+            "temperature": kwargs.get("temperature", 0.7),
+            "max_tokens": kwargs.get("max_tokens", 4096),
+            "stream": True,
+        }
+
+        # 添加工具参数
+        formatted_tools = self._format_tools_for_api(tools)
+        if formatted_tools:
+            api_params["tools"] = formatted_tools
+
         try:
-            stream = client.chat.completions.create(
-                model=self.model,
-                messages=encoded_messages,
-                temperature=kwargs.get("temperature", 0.7),
-                max_tokens=kwargs.get("max_tokens", 4096),
-                stream=True,
-            )
+            stream = client.chat.completions.create(**api_params)
+
+            # 收集工具调用数据
+            tool_calls_data: dict[int, dict] = {}  # index -> {id, name, arguments}
+            current_content = ""
 
             for chunk in stream:
-                if chunk.choices[0].delta.content:
-                    yield chunk.choices[0].delta.content
+                delta = chunk.choices[0].delta
+
+                # 处理内容
+                if delta.content:
+                    current_content += delta.content
+                    yield ChatResponse(content=delta.content)
+
+                # 处理工具调用
+                if delta.tool_calls:
+                    for tc in delta.tool_calls:
+                        idx = tc.index
+                        if idx not in tool_calls_data:
+                            tool_calls_data[idx] = {
+                                "id": tc.id or "",
+                                "name": "",
+                                "arguments": "",
+                            }
+                        if tc.id:
+                            tool_calls_data[idx]["id"] = tc.id
+                        if tc.function:
+                            if tc.function.name:
+                                tool_calls_data[idx]["name"] = tc.function.name
+                            if tc.function.arguments:
+                                tool_calls_data[idx]["arguments"] += tc.function.arguments
+
+                # 检查结束原因
+                finish_reason = chunk.choices[0].finish_reason
+                if finish_reason:
+                    # 如果有工具调用，生成完整的工具调用响应
+                    if tool_calls_data:
+                        tool_calls = [
+                            ToolCall(
+                                id=data["id"],
+                                name=data["name"],
+                                arguments=eval(data["arguments"]) if data["arguments"] else {},
+                            )
+                            for data in tool_calls_data.values()
+                        ]
+                        yield ChatResponse(
+                            content="",
+                            tool_calls=tool_calls,
+                            finish_reason="tool_calls",
+                        )
+                    else:
+                        yield ChatResponse(content="", finish_reason=finish_reason)
+
         except Exception as e:
             # 包装异常，添加更多信息
             raise Exception(f"API调用失败: {type(e).__name__}: {repr(e)}") from e

@@ -1,7 +1,7 @@
 # NoteAsSkill 系统配置文件
 # 此文件包含应用级别的配置，用户配置存储在 notebook/.config.yaml
 
-version: "v0.3.8"
+version: "v0.3.11"
 
 app:
   name: "NoteAsSkill"

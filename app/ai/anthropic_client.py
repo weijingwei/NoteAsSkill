@@ -1,10 +1,11 @@
 """Anthropic 客户端实现"""
 
+import json
 from typing import Any, Iterator
 
 from anthropic import Anthropic
 
-from .client import AIClient
+from .client import AIClient, ChatResponse, MCPToolSchema, ToolCall
 
 
 class AnthropicClient(AIClient):
@@ -79,11 +80,25 @@ class AnthropicClient(AIClient):
         """验证配置是否有效"""
         return bool(self.api_key and self.model)
 
+    def _format_tools_for_api(self, tools: list[MCPToolSchema] | None) -> list[dict] | None:
+        """将工具列表转换为 Anthropic API 格式"""
+        if not tools:
+            return None
+        return [
+            {
+                "name": tool.name,
+                "description": tool.description,
+                "input_schema": tool.input_schema,
+            }
+            for tool in tools
+        ]
+
     def chat(
         self,
         messages: list[dict[str, str]],
+        tools: list[MCPToolSchema] | None = None,
         **kwargs: Any,
-    ) -> str:
+    ) -> ChatResponse:
         """发送聊天消息"""
         client = self._get_client()
 
@@ -99,29 +114,56 @@ class AnthropicClient(AIClient):
             else:
                 chat_messages.append(msg)
 
-        response = client.messages.create(
-            model=self.model,
-            max_tokens=kwargs.get("max_tokens", 4096),
-            system=system_message if system_message else None,
-            messages=chat_messages,
-        )
+        api_params = {
+            "model": self.model,
+            "max_tokens": kwargs.get("max_tokens", 4096),
+            "system": system_message if system_message else None,
+            "messages": chat_messages,
+        }
 
-        # 处理响应内容，兼容 ThinkingBlock 等不同类型
+        # 添加工具参数
+        formatted_tools = self._format_tools_for_api(tools)
+        if formatted_tools:
+            api_params["tools"] = formatted_tools
+
+        response = client.messages.create(**api_params)
+
+        # 处理响应内容
+        content = ""
+        tool_calls = []
+        finish_reason = "stop"
+
         if response.content:
             for block in response.content:
-                # 跳过 ThinkingBlock，只返回文本内容
+                # 文本块
                 if hasattr(block, 'text'):
-                    return block.text
-                # 处理其他可能的类型
-                if hasattr(block, 'type') and block.type == 'text':
-                    return getattr(block, 'text', '')
-        return ""
+                    content += block.text
+                # 工具使用块
+                elif hasattr(block, 'type') and block.type == 'tool_use':
+                    tool_calls.append(ToolCall(
+                        id=block.id,
+                        name=block.name,
+                        arguments=block.input if hasattr(block, 'input') else {},
+                    ))
+
+        # 判断结束原因
+        if tool_calls:
+            finish_reason = "tool_calls"
+        elif response.stop_reason == "tool_use":
+            finish_reason = "tool_calls"
+
+        return ChatResponse(
+            content=content,
+            tool_calls=tool_calls if tool_calls else None,
+            finish_reason=finish_reason,
+        )
 
     def chat_stream(
         self,
         messages: list[dict[str, str]],
+        tools: list[MCPToolSchema] | None = None,
         **kwargs: Any,
-    ) -> Iterator[str]:
+    ) -> Iterator[ChatResponse]:
         """发送聊天消息（流式响应）"""
         client = self._get_client()
 
@@ -137,14 +179,68 @@ class AnthropicClient(AIClient):
             else:
                 chat_messages.append(msg)
 
-        with client.messages.stream(
-            model=self.model,
-            max_tokens=kwargs.get("max_tokens", 4096),
-            system=system_message if system_message else None,
-            messages=chat_messages,
-        ) as stream:
-            for text in stream.text_stream:
-                yield text
+        api_params = {
+            "model": self.model,
+            "max_tokens": kwargs.get("max_tokens", 4096),
+            "system": system_message if system_message else None,
+            "messages": chat_messages,
+        }
+
+        # 添加工具参数
+        formatted_tools = self._format_tools_for_api(tools)
+        if formatted_tools:
+            api_params["tools"] = formatted_tools
+
+        # 收集工具调用数据
+        tool_calls_data: dict[str, dict] = {}  # id -> {name, arguments}
+
+        with client.messages.stream(**api_params) as stream:
+            for event in stream:
+                # 文本内容
+                if event.type == "content_block_delta" and hasattr(event, 'delta'):
+                    if hasattr(event.delta, 'text'):
+                        yield ChatResponse(content=event.delta.text)
+
+                # 工具调用开始
+                elif event.type == "content_block_start":
+                    block = getattr(event, 'content_block', None)
+                    if block and hasattr(block, 'type') and block.type == 'tool_use':
+                        tool_calls_data[block.id] = {
+                            "name": block.name,
+                            "arguments": "",
+                        }
+
+                # 工具调用参数
+                elif event.type == "content_block_delta":
+                    delta = getattr(event, 'delta', None)
+                    if delta and hasattr(delta, 'type') and delta.type == 'input_json_delta':
+                        block_index = getattr(event, 'index', None)
+                        if block_index is not None and hasattr(stream, 'content_blocks'):
+                            blocks = stream.content_blocks
+                            if block_index < len(blocks):
+                                block = blocks[block_index]
+                                if hasattr(block, 'id') and block.id in tool_calls_data:
+                                    partial_json = getattr(delta, 'partial_json', '')
+                                    tool_calls_data[block.id]["arguments"] += partial_json
+
+                # 消息结束
+                elif event.type == "message_stop":
+                    if tool_calls_data:
+                        tool_calls = [
+                            ToolCall(
+                                id=tool_id,
+                                name=data["name"],
+                                arguments=json.loads(data["arguments"]) if data["arguments"] else {},
+                            )
+                            for tool_id, data in tool_calls_data.items()
+                        ]
+                        yield ChatResponse(
+                            content="",
+                            tool_calls=tool_calls,
+                            finish_reason="tool_calls",
+                        )
+                    else:
+                        yield ChatResponse(content="", finish_reason="stop")
 
     def list_models(self) -> list[str]:
         """列出可用的模型

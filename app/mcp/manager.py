@@ -5,6 +5,8 @@
 
 import asyncio
 import json
+import platform
+import shutil
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -79,15 +81,47 @@ class MCPServerWorker(QThread):
             env = dict(subprocess.os.environ)
             env.update(self.server.env)
 
-            self.server.process = subprocess.Popen(
-                [self.server.command] + self.server.args,
-                stdin=subprocess.PIPE,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                env=env,
-                text=True,
-                bufsize=1,
-            )
+            # 检查命令是否存在（Windows 需要特殊处理 .cmd 后缀）
+            command = self.server.command
+            cmd_path = shutil.which(command)
+
+            # Windows: 检查找到的路径是否是 .cmd 文件
+            if cmd_path and platform.system() == "Windows" and cmd_path.upper().endswith(".CMD"):
+                command = cmd_path
+
+            # Windows: 尝试添加 .cmd 后缀
+            if cmd_path is None and platform.system() == "Windows":
+                cmd_path = shutil.which(command + ".cmd")
+                if cmd_path:
+                    command = cmd_path
+
+            # Windows: 使用 shell=True 来正确执行 .cmd 文件
+            use_shell = platform.system() == "Windows" and command.upper().endswith(".CMD")
+
+            if use_shell:
+                # 对于 .cmd 文件，需要将命令和参数组合成字符串
+                full_command = " ".join([command] + self.server.args)
+                self.server.process = subprocess.Popen(
+                    full_command,
+                    stdin=subprocess.PIPE,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    env=env,
+                    text=True,
+                    bufsize=1,
+                    shell=True,
+                )
+            else:
+                # 非 Windows 或非 .cmd 文件，使用原有逻辑
+                self.server.process = subprocess.Popen(
+                    [command] + self.server.args,
+                    stdin=subprocess.PIPE,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    env=env,
+                    text=True,
+                    bufsize=1,
+                )
 
             self.server.status = "running"
             self.server_started.emit(self.server.name)
@@ -288,12 +322,122 @@ class MCPManager(QObject):
             tools.extend(server.tools)
         return tools
 
+    def list_tools(self) -> list[MCPTool]:
+        """列出所有可用工具（get_all_tools 的别名）"""
+        return self.get_all_tools()
+
     def get_tools_for_server(self, name: str) -> list[MCPTool]:
         server = self._servers.get(name)
         return server.tools if server else []
 
+    def call_tool(self, tool_name: str, arguments: dict) -> tuple[str, bool]:
+        """调用 MCP 工具
+
+        Args:
+            tool_name: 工具名称
+            arguments: 工具参数
+
+        Returns:
+            tuple[str, bool]: (结果内容, 是否错误)
+        """
+        # 查找工具所属的服务器
+        for server_name, server in self._servers.items():
+            for tool in server.tools:
+                if tool.name == tool_name:
+                    return self._call_tool_on_server(server, tool_name, arguments)
+
+        return f"Error: Tool '{tool_name}' not found", True
+
+    def _call_tool_on_server(self, server: MCPServer, tool_name: str, arguments: dict) -> tuple[str, bool]:
+        """在指定服务器上调用工具
+
+        Args:
+            server: MCP 服务器实例
+            tool_name: 工具名称
+            arguments: 工具参数
+
+        Returns:
+            tuple[str, bool]: (结果内容, 是否错误)
+        """
+        if not server.process or server.status != "running":
+            return f"Error: Server '{server.name}' is not running", True
+
+        try:
+            import json
+
+            request = {
+                "jsonrpc": "2.0",
+                "id": 100,  # 使用固定 ID，每次调用应该递增
+                "method": "tools/call",
+                "params": {
+                    "name": tool_name,
+                    "arguments": arguments
+                }
+            }
+
+            # 发送请求
+            message = json.dumps(request) + "\n"
+            server.process.stdin.write(message)
+            server.process.stdin.flush()
+
+            # 读取响应
+            response = self._read_server_response(server)
+            if response is None:
+                return "Error: No response from server", True
+
+            if "error" in response:
+                error_msg = response["error"].get("message", str(response["error"]))
+                return f"Error: {error_msg}", True
+
+            if "result" in response:
+                result = response["result"]
+                # 处理不同格式的结果
+                if isinstance(result, dict):
+                    # MCP 返回格式: {"content": [...]}
+                    if "content" in result:
+                        contents = result["content"]
+                        text_parts = []
+                        for item in contents:
+                            if isinstance(item, dict) and item.get("type") == "text":
+                                text_parts.append(item.get("text", ""))
+                            elif isinstance(item, str):
+                                text_parts.append(item)
+                        return "\n".join(text_parts), False
+                    return json.dumps(result, ensure_ascii=False), False
+                elif isinstance(result, str):
+                    return result, False
+                else:
+                    return str(result), False
+
+            return "Error: Unexpected response format", True
+
+        except Exception as e:
+            return f"Error: {str(e)}", True
+
+    def _read_server_response(self, server: MCPServer) -> dict | None:
+        """读取服务器响应
+
+        Args:
+            server: MCP 服务器实例
+
+        Returns:
+            dict | None: 响应字典或 None
+        """
+        if server.process and server.process.stdout:
+            try:
+                line = server.process.stdout.readline()
+                if line:
+                    return json.loads(line.strip())
+            except json.JSONDecodeError:
+                pass
+        return None
+
     @Slot(str, list)
     def _on_tools_discovered(self, server_name: str, tools: list[MCPTool]) -> None:
+        # 更新服务器的工具列表
+        server = self._servers.get(server_name)
+        if server:
+            server.tools = tools
         self.tools_updated.emit(server_name, tools)
 
     @Slot(str, str)

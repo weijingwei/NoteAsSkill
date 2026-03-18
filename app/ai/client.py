@@ -17,19 +17,59 @@
 """
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Iterator
 
 
 @dataclass
 class Message:
     """消息数据类"""
-    
+
     role: str  # "user" | "assistant" | "system"
     content: str
 
     def to_dict(self) -> dict[str, str]:
         return {"role": self.role, "content": self.content}
+
+
+@dataclass
+class ToolCall:
+    """工具调用请求"""
+    id: str
+    name: str
+    arguments: dict
+
+
+@dataclass
+class ToolResult:
+    """工具调用结果"""
+    tool_call_id: str
+    name: str
+    content: str
+    is_error: bool = False
+
+
+@dataclass
+class ChatResponse:
+    """聊天响应"""
+    content: str
+    tool_calls: list[ToolCall] | None = None
+    finish_reason: str = "stop"  # "stop" | "tool_calls"
+
+
+@dataclass
+class MCPToolSchema:
+    """MCP 工具 schema 定义"""
+    name: str
+    description: str = ""
+    input_schema: dict = field(default_factory=dict)
+
+    def to_dict(self) -> dict:
+        return {
+            "name": self.name,
+            "description": self.description,
+            "input_schema": self.input_schema,
+        }
 
 
 class AIClient(ABC):
@@ -68,16 +108,18 @@ class AIClient(ABC):
     def chat(
         self,
         messages: list[dict[str, str]],
+        tools: list[MCPToolSchema] | None = None,
         **kwargs: Any,
-    ) -> str:
+    ) -> ChatResponse:
         """发送聊天消息
 
         Args:
             messages: 消息列表
+            tools: 可用工具列表（可选）
             **kwargs: 额外参数
 
         Returns:
-            AI 响应内容
+            ChatResponse: 聊天响应，包含内容和可能的工具调用
         """
         pass
 
@@ -85,16 +127,18 @@ class AIClient(ABC):
     def chat_stream(
         self,
         messages: list[dict[str, str]],
+        tools: list[MCPToolSchema] | None = None,
         **kwargs: Any,
-    ) -> Iterator[str]:
+    ) -> Iterator[ChatResponse]:
         """发送聊天消息（流式响应）
 
         Args:
             messages: 消息列表
+            tools: 可用工具列表（可选）
             **kwargs: 额外参数
 
         Yields:
-            AI 响应内容片段
+            ChatResponse: 聊天响应片段，可能是内容片段或完整的工具调用
         """
         pass
 
