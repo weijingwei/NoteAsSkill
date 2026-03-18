@@ -199,6 +199,242 @@ class NoBorderComboBox(QComboBox):
         painter.drawPath(path)
 
 
+class ModelListWorker(QThread):
+    """异步加载模型列表的工作线程"""
+
+    models_loaded = Signal(list)
+    load_error = Signal(str)
+
+    def __init__(self, client, parent=None):
+        super().__init__(parent)
+        self._client = client
+
+    def run(self) -> None:
+        try:
+            if self._client is None:
+                self.models_loaded.emit([])
+                return
+            models = self._client.list_models()
+            self.models_loaded.emit(models or [])
+        except Exception as e:
+            self.load_error.emit(str(e))
+
+
+class ModelSelector(QWidget):
+    """模型选择器 - 使用 QToolButton + QFrame 弹出列表"""
+
+    model_changed = Signal(str)
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._models: list[str] = []
+        self._current_model: str = ""
+        self._popup: QFrame | None = None
+        self._is_loading = False
+        self._init_ui()
+
+    def _init_ui(self) -> None:
+        """初始化界面"""
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+
+        # 主按钮
+        self._button = QToolButton()
+        self._button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        self._button.setStyleSheet("""
+            QToolButton {
+                background-color: #FFFEF9;
+                border: 1px solid #E8DFD5;
+                border-radius: 4px;
+                padding: 4px 20px 4px 8px;
+                color: #4A3F35;
+                font-size: 12px;
+                min-width: 100px;
+                text-align: left;
+            }
+            QToolButton:hover {
+                border-color: #D4A574;
+                background-color: #FDF8F0;
+            }
+            QToolButton::menu-indicator {
+                subcontrol-position: right center;
+                subcontrol-origin: padding;
+                right: 6px;
+                width: 12px;
+            }
+        """)
+        self._button.clicked.connect(self._show_popup)
+        layout.addWidget(self._button)
+
+        # 设置初始文本
+        self._update_button_text("选择模型")
+
+    def _update_button_text(self, text: str) -> None:
+        """更新按钮文本，长文本截断显示"""
+        max_len = 20
+        if len(text) > max_len:
+            display_text = text[:max_len - 3] + "..."
+            self._button.setToolTip(text)
+        else:
+            display_text = text
+            self._button.setToolTip("")
+        self._button.setText(display_text)
+
+    def set_models(self, models: list[str]) -> None:
+        """设置模型列表"""
+        self._models = models
+
+    def set_current_model(self, model: str) -> None:
+        """设置当前模型"""
+        self._current_model = model
+        self._update_button_text(model)
+
+    def current_model(self) -> str:
+        """获取当前模型"""
+        return self._current_model
+
+    def show_loading(self) -> None:
+        """显示加载状态"""
+        self._is_loading = True
+        self._button.setText("加载中...")
+        self._button.setEnabled(False)
+
+    def hide_loading(self) -> None:
+        """隐藏加载状态"""
+        self._is_loading = False
+        self._button.setEnabled(True)
+        if self._current_model:
+            self._update_button_text(self._current_model)
+
+    def show_error(self, error_msg: str) -> None:
+        """显示错误状态"""
+        self._is_loading = False
+        self._button.setText(error_msg)
+        self._button.setEnabled(True)
+        self._button.setStyleSheet("""
+            QToolButton {
+                background-color: #FFF5F5;
+                border: 1px solid #E8B0A0;
+                border-radius: 4px;
+                padding: 4px 20px 4px 8px;
+                color: #8B5A2B;
+                font-size: 12px;
+                min-width: 100px;
+                text-align: left;
+            }
+            QToolButton:hover {
+                border-color: #D4A574;
+                background-color: #FDF8F0;
+            }
+        """)
+
+    def _show_popup(self) -> None:
+        """显示弹出列表"""
+        if self._is_loading:
+            return
+
+        # 关闭已有的弹出窗口
+        self._close_popup()
+
+        # 创建弹出容器
+        self._popup = QFrame(self, Qt.WindowType.Popup)
+        self._popup.setWindowFlags(
+            Qt.WindowType.Popup |
+            Qt.WindowType.FramelessWindowHint |
+            Qt.WindowType.NoDropShadowWindowHint
+        )
+        self._popup.setStyleSheet("""
+            QFrame {
+                background-color: #FFFEF9;
+                border: 1px solid #E8DFD5;
+                border-radius: 6px;
+            }
+        """)
+
+        layout = QVBoxLayout(self._popup)
+        layout.setContentsMargins(4, 4, 4, 4)
+        layout.setSpacing(0)
+
+        # 创建列表
+        list_widget = QListWidget()
+        list_widget.setMaximumHeight(200)
+        list_widget.setStyleSheet("""
+            QListWidget {
+                background-color: #FFFEF9;
+                border: none;
+                outline: none;
+            }
+            QListWidget::item {
+                padding: 8px 12px;
+                color: #5A4A3A;
+                font-size: 12px;
+                border-radius: 4px;
+            }
+            QListWidget::item:hover {
+                background-color: #FDF8F0;
+            }
+            QListWidget::item:selected {
+                background-color: #FDF6ED;
+                color: #8B5A2B;
+            }
+        """)
+
+        # 添加模型项
+        for model in self._models:
+            item = QListWidgetItem(model)
+            item.setData(Qt.ItemDataRole.UserRole, model)
+            # 长名称设置 tooltip
+            if len(model) > 30:
+                item.setToolTip(model)
+            list_widget.addItem(item)
+
+        list_widget.itemClicked.connect(self._on_item_clicked)
+        layout.addWidget(list_widget)
+
+        # 定位弹出窗口
+        button_rect = self._button.rect()
+        popup_pos = self._button.mapToGlobal(button_rect.bottomLeft())
+        popup_pos.setY(popup_pos.y() + 2)
+        self._popup.move(popup_pos)
+
+        # 设置宽度
+        popup_width = max(self._button.width(), 150)
+        self._popup.setFixedWidth(popup_width)
+
+        self._popup.show()
+
+        # 安装事件过滤器
+        self._popup.installEventFilter(self)
+
+    def _close_popup(self) -> None:
+        """关闭弹出窗口"""
+        if self._popup:
+            self._popup.close()
+            self._popup.deleteLater()
+            self._popup = None
+
+    def _on_item_clicked(self, item: QListWidgetItem) -> None:
+        """选择模型项"""
+        model = item.data(Qt.ItemDataRole.UserRole)
+        self._current_model = model
+        self._update_button_text(model)
+        self._close_popup()
+        self.model_changed.emit(model)
+
+    def eventFilter(self, obj, event) -> bool:
+        """事件过滤器 - 处理弹出窗口点击外部关闭"""
+        if obj == self._popup and event.type() == QEvent.Type.MouseButtonPress:
+            # 检查点击是否在弹出窗口外部
+            popup_rect = self._popup.rect()
+            popup_rect.moveTo(self._popup.mapToGlobal(popup_rect.topLeft()))
+            if not popup_rect.contains(event.globalPosition().toPoint()):
+                self._close_popup()
+                return True
+        return super().eventFilter(obj, event)
+
+
 class StreamChatWorker(QThread):
     """流式 AI 聊天工作线程"""
 
@@ -368,11 +604,12 @@ class ChatPanel(QWidget):
         self._selected_mcp_tools: list[str] = []
         self._use_note_context: bool = True
         self._mcp_manager: MCPManager = MCPManager.get_instance()
+        self._model_worker: ModelListWorker | None = None
 
         self._init_ui()
         self._connect_signals()
         self._load_client()
-        self._update_model_display()
+        self._load_model_list()
 
     def _init_ui(self) -> None:
         """初始化界面 - 参考截图设计"""
@@ -631,33 +868,10 @@ class ChatPanel(QWidget):
         bottom_toolbar = QHBoxLayout()
         bottom_toolbar.setSpacing(8)
 
-        # 模型选择下拉框
-        self.model_combo = NoBorderComboBox()
-        model_view = QListView()
-        model_view.setStyleSheet("""
-            QListView {
-                background-color: #FFFEF9;
-                border: none;
-                padding: 0px;
-                outline: none;
-                max-height: 150px;
-            }
-            QListView::item {
-                padding: 6px 10px;
-                min-height: 24px;
-                background-color: #FFFEF9;
-                color: #5A4A3A;
-            }
-            QListView::item:hover {
-                background-color: #FDF8F0;
-            }
-            QListView::item:selected {
-                background-color: #FDF6ED;
-                color: #8B5A2B;
-            }
-        """)
-        self.model_combo.setView(model_view)
-        bottom_toolbar.addWidget(self.model_combo)
+        # 模型选择器
+        self.model_selector = ModelSelector()
+        self.model_selector.setMinimumWidth(120)
+        bottom_toolbar.addWidget(self.model_selector)
 
         bottom_toolbar.addStretch()
 
@@ -681,42 +895,11 @@ class ChatPanel(QWidget):
         input_layout.addLayout(bottom_toolbar)
         layout.addWidget(input_container)
 
-        # 初始化
-        self._load_model_list()
-
-    def _load_model_list(self) -> None:
-        """加载模型列表"""
-        config = get_config()
-        provider = config.ai_provider
-        ai_config = config.get_ai_config(provider)
-        current_model = ai_config.get("model", "")
-
-        models = []
-
-        if self._client is not None:
-            try:
-                api_models = self._client.list_models()
-                if api_models:
-                    models = api_models
-            except Exception:
-                pass
-
-        self.model_combo.blockSignals(True)
-        self.model_combo.clear()
-        if models:
-            self.model_combo.addItems(models)
-        if current_model:
-            if models and current_model not in models:
-                self.model_combo.setCurrentText(current_model)
-            elif not models:
-                self.model_combo.setCurrentText(current_model)
-        self.model_combo.blockSignals(False)
-
     def _connect_signals(self) -> None:
         """连接信号"""
         self._mcp_manager.tools_updated.connect(self._on_mcp_tools_updated)
-        self.model_combo.currentTextChanged.connect(self._on_model_changed)
         self.mode_combo.currentTextChanged.connect(self._on_mode_changed)
+        self.model_selector.model_changed.connect(self._on_model_changed)
         # 输入框回车键发送（Ctrl+Enter 换行）
         self.input_edit.installEventFilter(self)
 
@@ -741,6 +924,48 @@ class ChatPanel(QWidget):
                 self.input_edit.setPlaceholderText(f"关于「{self._current_note_title}」提问，或直接开始对话...")
             else:
                 self.input_edit.setPlaceholderText("开始对话...")
+
+    def _load_model_list(self) -> None:
+        """异步加载模型列表"""
+        config = get_config()
+        provider = config.ai_provider
+        ai_config = config.get_ai_config(provider)
+        current_model = ai_config.get("model", "")
+
+        # 立即显示当前模型（从配置）
+        if current_model:
+            self.model_selector.set_current_model(current_model)
+
+        # 异步加载模型列表
+        self.model_selector.show_loading()
+
+        if self._model_worker is not None:
+            self._model_worker.requestInterruption()
+            self._model_worker.wait(1000)
+
+        self._model_worker = ModelListWorker(self._client)
+        self._model_worker.models_loaded.connect(self._on_models_loaded)
+        self._model_worker.load_error.connect(self._on_models_load_error)
+        self._model_worker.start()
+
+    def _on_models_loaded(self, models: list[str]) -> None:
+        """模型列表加载成功"""
+        self.model_selector.hide_loading()
+        self.model_selector.set_models(models)
+
+        config = get_config()
+        provider = config.ai_provider
+        ai_config = config.get_ai_config(provider)
+        current_model = ai_config.get("model", "")
+        if current_model:
+            self.model_selector.set_current_model(current_model)
+
+        self._model_worker = None
+
+    def _on_models_load_error(self, error: str) -> None:
+        """模型列表加载失败"""
+        self.model_selector.show_error("加载失败")
+        self._model_worker = None
 
     def eventFilter(self, obj, event) -> bool:
         """事件过滤器 - 处理回车键发送"""
@@ -793,10 +1018,6 @@ class ChatPanel(QWidget):
                         item.setSizeHint(widget.sizeHint())
         # 强制刷新列表视图
         self.message_list.viewport().update()
-
-    def _update_model_display(self) -> None:
-        """更新模型显示"""
-        self._load_model_list()
 
     def _on_mcp_tools_updated(self, server_name: str, tools: list) -> None:
         """MCP 工具更新"""
@@ -1034,7 +1255,7 @@ class ChatPanel(QWidget):
     def reload_client(self) -> None:
         """重新加载客户端"""
         self._load_client()
-        self._update_model_display()
+        self._load_model_list()
 
     def _show_message_context_menu(self, pos: QPoint) -> None:
         """显示消息右键菜单"""
@@ -1100,3 +1321,10 @@ class ChatPanel(QWidget):
                 self._worker.terminate()
                 self._worker.wait()
             self._worker = None
+
+        if self._model_worker is not None:
+            self._model_worker.requestInterruption()
+            if not self._model_worker.wait(2000):
+                self._model_worker.terminate()
+                self._model_worker.wait()
+            self._model_worker = None
