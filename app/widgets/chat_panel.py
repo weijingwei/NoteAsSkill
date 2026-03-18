@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
     QListWidget,
     QListWidgetItem,
     QPushButton,
@@ -230,6 +231,8 @@ class ModelSelector(QWidget):
         self._models: list[str] = []
         self._current_model: str = ""
         self._popup: QFrame | None = None
+        self._list_widget: QListWidget | None = None
+        self._filter_edit: QLineEdit | None = None
         self._is_loading = False
         self._init_ui()
 
@@ -251,7 +254,7 @@ class ModelSelector(QWidget):
                 padding: 4px 20px 4px 8px;
                 color: #4A3F35;
                 font-size: 12px;
-                min-width: 100px;
+                min-width: 140px;
                 text-align: left;
             }
             QToolButton:hover {
@@ -321,7 +324,7 @@ class ModelSelector(QWidget):
                 padding: 4px 20px 4px 8px;
                 color: #8B5A2B;
                 font-size: 12px;
-                min-width: 100px;
+                min-width: 140px;
                 text-align: left;
             }
             QToolButton:hover {
@@ -355,12 +358,31 @@ class ModelSelector(QWidget):
 
         layout = QVBoxLayout(self._popup)
         layout.setContentsMargins(4, 4, 4, 4)
-        layout.setSpacing(0)
+        layout.setSpacing(4)
+
+        # 搜索过滤框
+        self._filter_edit = QLineEdit()
+        self._filter_edit.setPlaceholderText("搜索模型...")
+        self._filter_edit.setStyleSheet("""
+            QLineEdit {
+                background-color: #FFFEF9;
+                border: 1px solid #E8DFD5;
+                border-radius: 4px;
+                padding: 6px 10px;
+                color: #4A3F35;
+                font-size: 12px;
+            }
+            QLineEdit:focus {
+                border-color: #D4A574;
+            }
+        """)
+        self._filter_edit.textChanged.connect(self._filter_models)
+        layout.addWidget(self._filter_edit)
 
         # 创建列表
-        list_widget = QListWidget()
-        list_widget.setMaximumHeight(200)
-        list_widget.setStyleSheet("""
+        self._list_widget = QListWidget()
+        self._list_widget.setMaximumHeight(200)
+        self._list_widget.setStyleSheet("""
             QListWidget {
                 background-color: #FFFEF9;
                 border: none;
@@ -388,10 +410,10 @@ class ModelSelector(QWidget):
             # 长名称设置 tooltip
             if len(model) > 30:
                 item.setToolTip(model)
-            list_widget.addItem(item)
+            self._list_widget.addItem(item)
 
-        list_widget.itemClicked.connect(self._on_item_clicked)
-        layout.addWidget(list_widget)
+        self._list_widget.itemClicked.connect(self._on_item_clicked)
+        layout.addWidget(self._list_widget)
 
         # 定位弹出窗口
         button_rect = self._button.rect()
@@ -399,14 +421,18 @@ class ModelSelector(QWidget):
         popup_pos.setY(popup_pos.y() + 2)
         self._popup.move(popup_pos)
 
-        # 设置宽度
-        popup_width = max(self._button.width(), 150)
+        # 设置宽度（按钮宽度的 1.5 倍）
+        popup_width = int(self._button.width() * 1.5)
         self._popup.setFixedWidth(popup_width)
 
         self._popup.show()
 
+        # 自动聚焦到搜索框
+        self._filter_edit.setFocus()
+
         # 安装事件过滤器
         self._popup.installEventFilter(self)
+        self._filter_edit.installEventFilter(self)
 
     def _close_popup(self) -> None:
         """关闭弹出窗口"""
@@ -414,6 +440,18 @@ class ModelSelector(QWidget):
             self._popup.close()
             self._popup.deleteLater()
             self._popup = None
+
+    def _filter_models(self, filter_text: str) -> None:
+        """过滤模型列表"""
+        if not self._list_widget:
+            return
+
+        filter_lower = filter_text.lower()
+        for i in range(self._list_widget.count()):
+            item = self._list_widget.item(i)
+            model = item.data(Qt.ItemDataRole.UserRole)
+            # 模糊匹配：包含过滤文本即显示
+            item.setHidden(filter_lower not in model.lower())
 
     def _on_item_clicked(self, item: QListWidgetItem) -> None:
         """选择模型项"""
@@ -423,15 +461,68 @@ class ModelSelector(QWidget):
         self._close_popup()
         self.model_changed.emit(model)
 
+    def _navigate_list(self, direction: int) -> None:
+        """导航列表项
+
+        Args:
+            direction: 1 向下，-1 向上
+        """
+        if not self._list_widget or self._list_widget.count() == 0:
+            return
+
+        current_row = self._list_widget.currentRow()
+
+        # 找到下一个可见项
+        for i in range(1, self._list_widget.count() + 1):
+            next_row = (current_row + direction * i) % self._list_widget.count()
+            if next_row < 0:
+                next_row = self._list_widget.count() - 1
+            item = self._list_widget.item(next_row)
+            if item and not item.isHidden():
+                self._list_widget.setCurrentRow(next_row)
+                self._list_widget.scrollToItem(item)
+                break
+
+    def _select_current_item(self) -> None:
+        """选择当前高亮项"""
+        if not self._list_widget:
+            return
+
+        item = self._list_widget.currentItem()
+        if item and not item.isHidden():
+            self._on_item_clicked(item)
+
     def eventFilter(self, obj, event) -> bool:
-        """事件过滤器 - 处理弹出窗口点击外部关闭"""
+        """事件过滤器 - 处理弹出窗口点击外部关闭和键盘导航"""
+        # 键盘导航处理
+        if obj == self._filter_edit and event.type() == QEvent.Type.KeyPress:
+            key = event.key()
+
+            if key == Qt.Key.Key_Down:
+                # 向下移动选择
+                self._navigate_list(1)
+                return True
+            elif key == Qt.Key.Key_Up:
+                # 向上移动选择
+                self._navigate_list(-1)
+                return True
+            elif key == Qt.Key.Key_Return or key == Qt.Key.Key_Enter:
+                # 确认选择
+                self._select_current_item()
+                return True
+            elif key == Qt.Key.Key_Escape:
+                # 关闭弹出窗口
+                self._close_popup()
+                return True
+
+        # 原有的点击外部关闭逻辑
         if obj == self._popup and event.type() == QEvent.Type.MouseButtonPress:
-            # 检查点击是否在弹出窗口外部
             popup_rect = self._popup.rect()
             popup_rect.moveTo(self._popup.mapToGlobal(popup_rect.topLeft()))
             if not popup_rect.contains(event.globalPosition().toPoint()):
                 self._close_popup()
                 return True
+
         return super().eventFilter(obj, event)
 
 
@@ -657,7 +748,7 @@ class ChatPanel(QWidget):
                 padding: 2px 6px;
                 padding-right: 18px;
                 color: #4A3F35;
-                min-width: 100px;
+                min-width: 140px;
             }
             QComboBox:hover {
                 background-color: #FDF8F0;
@@ -870,7 +961,7 @@ class ChatPanel(QWidget):
 
         # 模型选择器
         self.model_selector = ModelSelector()
-        self.model_selector.setMinimumWidth(120)
+        self.model_selector.setMinimumWidth(160)
         bottom_toolbar.addWidget(self.model_selector)
 
         bottom_toolbar.addStretch()
@@ -912,6 +1003,10 @@ class ChatPanel(QWidget):
         config.set_ai_config(provider, ai_config)
         config.save()
 
+        # 更新客户端的模型
+        if self._client is not None:
+            self._client.model = model
+
     def _on_mode_changed(self, mode: str) -> None:
         """模式改变"""
         self._messages = []
@@ -942,11 +1037,24 @@ class ChatPanel(QWidget):
         if self._model_worker is not None:
             self._model_worker.requestInterruption()
             self._model_worker.wait(1000)
+            self._model_worker = None
 
-        self._model_worker = ModelListWorker(self._client)
+        # 如果 client 为 None，不需要启动线程
+        if self._client is None:
+            self.model_selector.hide_loading()
+            return
+
+        self._model_worker = ModelListWorker(self._client, self)
         self._model_worker.models_loaded.connect(self._on_models_loaded)
         self._model_worker.load_error.connect(self._on_models_load_error)
+        self._model_worker.finished.connect(self._on_model_worker_finished)
         self._model_worker.start()
+
+    def _on_model_worker_finished(self) -> None:
+        """模型加载线程完成"""
+        if self._model_worker is not None:
+            self._model_worker.deleteLater()
+            self._model_worker = None
 
     def _on_models_loaded(self, models: list[str]) -> None:
         """模型列表加载成功"""
@@ -960,12 +1068,9 @@ class ChatPanel(QWidget):
         if current_model:
             self.model_selector.set_current_model(current_model)
 
-        self._model_worker = None
-
     def _on_models_load_error(self, error: str) -> None:
         """模型列表加载失败"""
         self.model_selector.show_error("加载失败")
-        self._model_worker = None
 
     def eventFilter(self, obj, event) -> bool:
         """事件过滤器 - 处理回车键发送"""
