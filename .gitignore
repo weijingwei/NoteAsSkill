@@ -42,7 +42,14 @@ notebook/.index.json
 notebook/.config.yaml
 *.pyc
 
+# Notebook 运行时数据
+notebook/skills/
+notebook/.folder_skills/
+
 # Claude Code
 CLAUDE.md
 .claude/
 tests/screenshots/
+
+# 测试临时数据
+test_notebook/
