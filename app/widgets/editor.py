@@ -10,7 +10,10 @@ from typing import Any
 from PySide6.QtCore import QUrl, Signal, Slot, QObject, Qt, QEvent, QTimer
 from PySide6.QtWebChannel import QWebChannel
 from PySide6.QtWebEngineWidgets import QWebEngineView
-from PySide6.QtWidgets import QWidget, QVBoxLayout
+from PySide6.QtWidgets import (
+    QWidget, QVBoxLayout, QDialog, QVBoxLayout as DialogVBoxLayout,
+    QHBoxLayout, QPushButton, QLabel, QTextEdit, QScrollArea
+)
 from PySide6.QtGui import QWheelEvent
 
 logger = logging.getLogger(__name__)
@@ -27,6 +30,8 @@ EDITOR_HTML_TEMPLATE = """
     <!-- Font Awesome - EasyMDE 工具栏图标依赖 -->
     <link rel="stylesheet" href="{fa_css_path}">
     <link rel="stylesheet" href="{easymde_css_path}">
+    <!-- QWebChannel - Python-JS 通信 -->
+    <script src="qrc:///qtwebchannel/qwebchannel.js"></script>
     <style>
         html, body {{
             margin: 0;
@@ -98,7 +103,16 @@ EDITOR_HTML_TEMPLATE = """
                     'quote', 'unordered-list', 'ordered-list', '|',
                     'link', 'image', 'code', '|',
                     'preview', 'side-by-side', 'fullscreen', '|',
-                    'guide'
+                    {{
+                        name: 'custom-help',
+                        action: function customHelp() {{
+                            if (bridge) {{
+                                bridge.showHelpDialog();
+                            }}
+                        }},
+                        className: 'fa fa-question-circle',
+                        title: 'Markdown 语法帮助'
+                    }}
                 ],
                 previewRender: function(plainText) {{
                     return this.parent.markdown(plainText);
@@ -133,10 +147,203 @@ EDITOR_HTML_TEMPLATE = """
 """
 
 
+# Markdown 语法帮助内容
+MARKDOWN_HELP_CONTENT = """# Markdown 语法指南
+
+## 基础语法
+
+### 标题
+```markdown
+# 一级标题
+## 二级标题
+### 三级标题
+#### 四级标题
+##### 五级标题
+###### 六级标题
+```
+
+### 文本样式
+```markdown
+**粗体文本** 或 __粗体文本__
+*斜体文本* 或 _斜体文本_
+~~删除线~~
+`行内代码`
+```
+
+### 列表
+```markdown
+- 无序列表项 1
+- 无序列表项 2
+  - 嵌套项
+  - 嵌套项
+
+1. 有序列表项 1
+2. 有序列表项 2
+   1. 嵌套项
+   2. 嵌套项
+```
+
+### 链接和图片
+```markdown
+[链接文本](https://example.com)
+![图片说明](图片路径.jpg)
+```
+
+### 引用
+```markdown
+> 这是一段引用文本
+> 可以有多行
+```
+
+### 代码块
+```markdown
+```python
+def hello():
+    print("Hello, World!")
+```
+```
+
+### 分割线
+```markdown
+---
+***
+___
+```
+
+### 表格
+```markdown
+| 表头1 | 表头2 | 表头3 |
+|-------|-------|-------|
+| 内容1 | 内容2 | 内容3 |
+| 内容4 | 内容5 | 内容6 |
+```
+
+### 任务列表
+```markdown
+- [x] 已完成任务
+- [ ] 未完成任务
+- [ ] 未完成任务
+```
+
+### 脚注
+```markdown
+这是一个脚注示例[^1]
+
+[^1]: 这是脚注内容
+```
+
+## 快捷键
+
+| 快捷键 | 功能 |
+|--------|------|
+| Ctrl+B | 粗体 |
+| Ctrl+I | 斜体 |
+| Ctrl+K | 插入链接 |
+| Ctrl+Z | 撤销 |
+| Ctrl+Y | 重做 |
+| Ctrl+S | 保存 |
+
+## 提示
+
+- 使用工具栏按钮快速插入 Markdown 语法
+- 点击预览按钮查看渲染效果
+- 支持标准 Markdown 和 GitHub Flavored Markdown
+"""
+
+
+class MarkdownHelpDialog(QDialog):
+    """Markdown 帮助对话框"""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Markdown 语法帮助")
+        self.setMinimumSize(600, 500)
+        self.setStyleSheet("""
+            QDialog {
+                background-color: #FBF7F2;
+            }
+            QLabel {
+                color: #3D3428;
+                font-size: 13px;
+            }
+            QPushButton {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #D4A574, stop:1 #C49564);
+                color: #FFFEF9;
+                border: none;
+                border-radius: 6px;
+                padding: 8px 20px;
+                font-size: 13px;
+            }
+            QPushButton:hover {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #C49564, stop:1 #B48554);
+            }
+        """)
+        self._init_ui()
+
+    def _init_ui(self):
+        """初始化界面"""
+        layout = DialogVBoxLayout(self)
+        layout.setSpacing(12)
+        layout.setContentsMargins(16, 16, 16, 16)
+
+        # 标题
+        title_label = QLabel("📘 Markdown 语法指南")
+        title_label.setStyleSheet("""
+            QLabel {
+                font-size: 16px;
+                font-weight: bold;
+                color: #3D3428;
+                padding-bottom: 8px;
+                border-bottom: 1px solid #E8DFD5;
+            }
+        """)
+        layout.addWidget(title_label)
+
+        # 滚动区域
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setStyleSheet("""
+            QScrollArea {
+                border: 1px solid #E8DFD5;
+                border-radius: 8px;
+                background-color: #FFFEF9;
+            }
+        """)
+
+        # 帮助内容
+        help_text = QTextEdit()
+        help_text.setReadOnly(True)
+        help_text.setMarkdown(MARKDOWN_HELP_CONTENT)
+        help_text.setStyleSheet("""
+            QTextEdit {
+                background-color: #FFFEF9;
+                border: none;
+                padding: 12px;
+                font-size: 13px;
+                line-height: 1.6;
+            }
+        """)
+        scroll.setWidget(help_text)
+        layout.addWidget(scroll)
+
+        # 关闭按钮
+        btn_layout = QHBoxLayout()
+        btn_layout.addStretch()
+
+        close_btn = QPushButton("关闭")
+        close_btn.clicked.connect(self.accept)
+        btn_layout.addWidget(close_btn)
+
+        layout.addLayout(btn_layout)
+
+
 class EditorBridge(QObject):
     """Python-JS 桥接类"""
 
     content_changed = Signal(str)
+    help_requested = Signal()
 
     def __init__(self):
         super().__init__()
@@ -145,6 +352,11 @@ class EditorBridge(QObject):
     def onContentChanged(self, content: str) -> None:
         """内容改变回调"""
         self.content_changed.emit(content)
+
+    @Slot()
+    def showHelpDialog(self) -> None:
+        """显示帮助对话框"""
+        self.help_requested.emit()
 
 
 class EditorWebView(QWebEngineView):
@@ -280,16 +492,42 @@ class Editor(QWidget):
         # 使用本地文件路径作为 baseUrl，确保相对路径正确解析
         # 注意：baseUrl 需要以 / 结尾才能正确解析相对路径
         base_url = QUrl.fromLocalFile(static_path + os.sep)
+
+        # 页面加载完成后设置桥接对象
+        self.web_view.loadFinished.connect(self._on_page_loaded)
+
         self.web_view.setHtml(html, base_url)
+
+    def _on_page_loaded(self) -> None:
+        """页面加载完成后设置桥接对象"""
+        # 通过 QWebChannel 设置 bridge 对象
+        js = """
+        if (typeof qt !== 'undefined' && qt.webChannelTransport) {
+            new QWebChannel(qt.webChannelTransport, function(channel) {
+                window.bridge = channel.objects.bridge;
+                if (typeof setBridge === 'function') {
+                    setBridge(window.bridge);
+                }
+            });
+        }
+        """
+        self.web_view.page().runJavaScript(js)
 
     def _connect_signals(self) -> None:
         """连接信号"""
         self._bridge.content_changed.connect(self._on_content_changed)
+        self._bridge.help_requested.connect(self._on_help_requested)
 
     @Slot(str)
     def _on_content_changed(self, content: str) -> None:
         """内容改变"""
         self.content_changed.emit()
+
+    @Slot()
+    def _on_help_requested(self) -> None:
+        """显示帮助对话框"""
+        dialog = MarkdownHelpDialog(self)
+        dialog.exec()
 
     def set_content(self, content: str, title: str = "", note_id: str = "") -> None:
         """设置编辑器内容"""

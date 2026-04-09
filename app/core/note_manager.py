@@ -20,15 +20,22 @@
     # 列出笔记
     notes = manager.list_notes(folder="my-folder")
 """
+import re
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 import json
-import re
 import shutil
 
 from .singleton import SingletonMeta
+from .note_naming import (
+    validate_note_name,
+    sanitize_note_name,
+    generate_unique_name,
+    name_to_folder_name,
+    name_to_skill_name,
+)
 
 
 @dataclass
@@ -202,14 +209,23 @@ class NoteManager(metaclass=SingletonMeta):
         folder: str = "",
         tags: list[str] | None = None,
     ) -> Note:
-        """创建新笔记"""
-        base_id = self._slugify(title)
-        note_id = base_id
-        counter = 1
-        while note_id in self._notes:
-            note_id = f"{base_id}-{counter}"
-            counter += 1
-
+        """创建新笔记
+        
+        笔记名称将同时作为文件夹名和笔记ID，三者保持一致。
+        """
+        # 清理笔记名称
+        sanitized_title = sanitize_note_name(title)
+        
+        # 获取已存在的笔记名称集合
+        existing_names = {note.title for note in self._notes.values()}
+        
+        # 生成唯一的笔记名称
+        unique_title = generate_unique_name(sanitized_title, existing_names)
+        
+        # 笔记ID = 笔记名称 = 文件夹名
+        note_id = unique_title
+        
+        # 创建笔记目录（使用笔记名称作为文件夹名）
         note_path = self._get_note_path(note_id)
         note_path.mkdir(parents=True, exist_ok=True)
 
@@ -232,7 +248,7 @@ class NoteManager(metaclass=SingletonMeta):
         now = datetime.now()
         note = Note(
             id=note_id,
-            title=title,
+            title=unique_title,
             path=note_path,
             folder=folder,
             tags=tags or [],
@@ -267,18 +283,73 @@ class NoteManager(metaclass=SingletonMeta):
         folder: str | None = None,
         tags: list[str] | None = None,
     ) -> Note | None:
-        """更新笔记"""
+        """更新笔记
+        
+        如果修改了标题，会同步重命名文件夹。
+        """
         note = self._notes.get(note_id)
         if note is None:
             return None
+
+        # 处理标题修改（需要同步重命名文件夹）
+        if title is not None and title != note.title:
+            # 清理新标题
+            sanitized_title = sanitize_note_name(title)
+            
+            # 检查是否与其他笔记冲突
+            existing_names = {n.title for n in self._notes.values() if n.id != note_id}
+            if sanitized_title in existing_names:
+                # 生成唯一名称
+                sanitized_title = generate_unique_name(sanitized_title, existing_names)
+            
+            # 新的笔记ID = 新的标题
+            new_note_id = sanitized_title
+            
+            # 获取旧路径和新路径
+            old_note_path = self._get_note_path(note_id)
+            new_note_path = self._get_note_path(new_note_id)
+
+            # 获取 skills 路径
+            old_skill_path = self._get_skill_path(note_id)
+            new_skill_path = self._get_skill_path(new_note_id)
+
+            # 重命名笔记文件夹
+            if old_note_path.exists():
+                try:
+                    old_note_path.rename(new_note_path)
+                except Exception:
+                    # 如果重命名失败，保持原名称
+                    sanitized_title = note.title
+                    new_note_id = note_id
+                    new_note_path = old_note_path
+
+            # 重命名 skills 文件夹
+            if old_skill_path.exists():
+                try:
+                    old_skill_path.rename(new_skill_path)
+                except Exception:
+                    # skills 重命名失败不影响主要功能
+                    pass
+            
+            # 更新笔记信息
+            old_id = note.id
+            note.id = new_note_id
+            note.title = sanitized_title
+            note.path = new_note_path
+            
+            # 更新索引中的键
+            if old_id in self._notes:
+                del self._notes[old_id]
+                self._notes[new_note_id] = note
+            
+            # 更新 note_id 变量以便后续使用
+            note_id = new_note_id
 
         if content is not None:
             note_file = self._get_note_file(note_id)
             with open(note_file, "w", encoding="utf-8") as f:
                 f.write(content)
 
-        if title is not None:
-            note.title = title
         if folder is not None:
             note.folder = folder
         if tags is not None:

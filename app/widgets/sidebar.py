@@ -5,12 +5,15 @@
 支持拖拽笔记到文件夹。
 """
 
+import platform
+import subprocess
 from pathlib import Path
 from typing import Any
 
 from PySide6.QtCore import Qt, Signal, Slot, QMimeData, QPoint, QRect
 from PySide6.QtGui import QAction, QDrag, QPainter, QColor, QFont, QPolygon, QIcon
 from PySide6.QtWidgets import (
+    QDialog,
     QHBoxLayout,
     QInputDialog,
     QLabel,
@@ -26,6 +29,158 @@ from PySide6.QtWidgets import (
 )
 
 from ..core.note_manager import Note, Folder, get_note_manager
+from ..core.note_naming import validate_note_name, sanitize_note_name
+
+
+class NewNoteDialog(QDialog):
+    """新建笔记对话框 - 自定义小巧按钮"""
+
+    def __init__(self, parent=None, folder_name: str = ""):
+        super().__init__(parent)
+        self.folder_name = folder_name
+        self.note_title = ""
+        self.setWindowTitle("新建笔记")
+        self.setMinimumWidth(320)
+        self.setStyleSheet("""
+            QDialog {
+                background-color: #FBF7F2;
+            }
+            QLabel {
+                color: #3D3428;
+                font-size: 13px;
+            }
+            QLineEdit {
+                background-color: #FFFEF9;
+                border: 1px solid #E8DFD5;
+                border-radius: 4px;
+                padding: 6px 8px;
+                font-size: 13px;
+                color: #3D3428;
+            }
+            QLineEdit:focus {
+                border-color: #D4A574;
+            }
+        """)
+        self._init_ui()
+
+    def _init_ui(self) -> None:
+        layout = QVBoxLayout(self)
+        layout.setSpacing(12)
+        layout.setContentsMargins(16, 16, 16, 16)
+
+        # 标题标签
+        label = QLabel("请输入笔记标题:")
+        layout.addWidget(label)
+
+        # 输入框
+        self.title_input = QLineEdit()
+        if self.folder_name:
+            self.title_input.setPlaceholderText(f"将在「{self.folder_name}」文件夹中创建")
+        else:
+            self.title_input.setPlaceholderText("笔记标题（支持中英文、数字、空格等）")
+        self.title_input.textChanged.connect(self._on_text_changed)
+        layout.addWidget(self.title_input)
+
+        # 错误提示标签
+        self.error_label = QLabel("")
+        self.error_label.setStyleSheet("""
+            QLabel {
+                color: #E74C3C;
+                font-size: 11px;
+            }
+        """)
+        self.error_label.hide()
+        layout.addWidget(self.error_label)
+
+        # 提示信息
+        hint_label = QLabel("提示：不能使用 <>:\"/\\|?* 等特殊字符，不能以空格或点号开头结尾")
+        hint_label.setStyleSheet("""
+            QLabel {
+                color: #8B7B6B;
+                font-size: 10px;
+            }
+        """)
+        layout.addWidget(hint_label)
+
+        # 按钮布局
+        btn_layout = QHBoxLayout()
+        btn_layout.addStretch()
+
+        # 取消按钮 - 小巧紧凑
+        cancel_btn = QPushButton("取消")
+        cancel_btn.setFixedSize(50, 24)
+        cancel_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #F5EDE4;
+                color: #5A4A3A;
+                border: 1px solid #E8DFD5;
+                border-radius: 4px;
+                font-size: 12px;
+                padding: 2px 8px;
+            }
+            QPushButton:hover {
+                background-color: #E8DFD5;
+            }
+        """)
+        cancel_btn.clicked.connect(self.reject)
+        btn_layout.addWidget(cancel_btn)
+
+        # 确定按钮 - 小巧紧凑
+        self.confirm_btn = QPushButton("确定")
+        self.confirm_btn.setFixedSize(50, 24)
+        self.confirm_btn.setStyleSheet("""
+            QPushButton {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #D4A574, stop:1 #C49564);
+                color: #FFFEF9;
+                border: none;
+                border-radius: 4px;
+                font-size: 12px;
+                padding: 2px 8px;
+            }
+            QPushButton:hover {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #C49564, stop:1 #B48554);
+            }
+            QPushButton:disabled {
+                background: #E8DFD5;
+                color: #8B7B6B;
+            }
+        """)
+        self.confirm_btn.clicked.connect(self._on_confirm)
+        self.confirm_btn.setDefault(True)
+        btn_layout.addWidget(self.confirm_btn)
+
+        layout.addLayout(btn_layout)
+
+    def _on_text_changed(self, text: str) -> None:
+        """文本改变时验证"""
+        is_valid, error_msg = validate_note_name(text.strip())
+        if not is_valid and text.strip():
+            self.error_label.setText(error_msg)
+            self.error_label.show()
+            self.confirm_btn.setEnabled(False)
+        else:
+            self.error_label.hide()
+            self.confirm_btn.setEnabled(True)
+
+    def _on_confirm(self) -> None:
+        """确定按钮点击"""
+        raw_title = self.title_input.text().strip()
+        if not raw_title:
+            self.title_input.setFocus()
+            return
+
+        # 验证名称
+        is_valid, error_msg = validate_note_name(raw_title)
+        if not is_valid:
+            self.error_label.setText(error_msg)
+            self.error_label.show()
+            return
+
+        # 清理名称
+        self.note_title = sanitize_note_name(raw_title)
+        self.accept()
 
 
 class DraggableListWidget(QListWidget):
@@ -528,15 +683,10 @@ class Sidebar(QWidget):
     @Slot()
     def create_new_note(self) -> None:
         """创建新笔记"""
-        title, ok = QInputDialog.getText(
-            self,
-            "新建笔记",
-            "请输入笔记标题:",
-        )
-
-        if ok and title:
+        dialog = NewNoteDialog(self, self._current_folder)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
             note_manager = get_note_manager()
-            note = note_manager.create_note(title, folder=self._current_folder)
+            note = note_manager.create_note(dialog.note_title, folder=self._current_folder)
 
             self.refresh()
             self.note_created.emit(note)
@@ -574,38 +724,75 @@ class Sidebar(QWidget):
         note = note_manager.get_note(note_id)
 
         menu = QMenu(self)
+        self._apply_menu_style(menu)
+
+        # 在系统中查看
+        open_action = QAction("在系统中查看", self)
+        open_action.triggered.connect(lambda: self._open_note_in_system(note_id))
+        menu.addAction(open_action)
 
         rename_action = QAction("重命名", self)
         rename_action.triggered.connect(lambda: self._rename_note(note_id))
         menu.addAction(rename_action)
 
-        menu.addSeparator()
-
         delete_action = QAction("删除", self)
         delete_action.triggered.connect(lambda: self._delete_note(note_id))
         menu.addAction(delete_action)
 
-        menu.addSeparator()
-
-        # 移动到文件夹
         folders = note_manager.list_folders()
         if folders:
             move_menu = menu.addMenu("移动到")
+            self._apply_menu_style(move_menu)
 
             no_folder_action = QAction("无文件夹", self)
             no_folder_action.triggered.connect(lambda: self._move_note_to_folder(note_id, ""))
             move_menu.addAction(no_folder_action)
 
-            move_menu.addSeparator()
-
             for folder in folders:
-                # 显示完整路径（包含父文件夹）
                 path = self._get_folder_path(folder.name, note_manager)
                 action = QAction(path, self)
                 action.triggered.connect(lambda checked, f=folder.name: self._move_note_to_folder(note_id, f))
                 move_menu.addAction(action)
 
         menu.exec(self.note_list.mapToGlobal(pos))
+
+    def _open_note_in_system(self, note_id: str) -> None:
+        """在系统文件管理器中打开笔记文件"""
+        note_manager = get_note_manager()
+        note = note_manager.get_note(note_id)
+
+        if not note:
+            return
+
+        # 获取笔记文件路径
+        note_file = note_manager._get_note_file(note_id)
+
+        if not note_file.exists():
+            return
+
+        # 根据操作系统选择打开方式
+        system = platform.system()
+
+        try:
+            if system == "Windows":
+                # Windows: 使用 explorer 打开文件所在文件夹并选中文件
+                subprocess.run(["explorer", "/select,", str(note_file)], check=True)
+            elif system == "Darwin":  # macOS
+                # macOS: 使用 open 命令打开文件所在文件夹
+                subprocess.run(["open", "-R", str(note_file)], check=True)
+            else:  # Linux
+                # Linux: 使用 xdg-open 打开文件所在文件夹
+                subprocess.run(["xdg-open", str(note_file.parent)], check=True)
+        except Exception as e:
+            # 如果打开失败，尝试使用通用方法
+            try:
+                if system == "Windows":
+                    import os
+                    os.startfile(str(note_file.parent))
+                else:
+                    subprocess.run(["xdg-open", str(note_file.parent)], check=True)
+            except Exception:
+                pass
 
     def _get_folder_path(self, folder_name: str, note_manager: Any) -> str:
         """获取文件夹的完整路径"""
@@ -628,25 +815,28 @@ class Sidebar(QWidget):
         folder_name = item.data(0, Qt.ItemDataRole.UserRole)
 
         menu = QMenu(self)
+        self._apply_menu_style(menu)
 
         if not folder_name:  # "全部笔记"
+            new_note_action = QAction("新建笔记", self)
+            new_note_action.triggered.connect(lambda: self._create_note_in_folder(""))
+            menu.addAction(new_note_action)
+
             new_folder_action = QAction("新建文件夹", self)
             new_folder_action.triggered.connect(lambda: self._create_folder(None))
             menu.addAction(new_folder_action)
 
-            menu.addSeparator()
-
-            # 刷新所有文件夹概要
             refresh_all_action = QAction("刷新所有文件夹概要", self)
             refresh_all_action.triggered.connect(self._refresh_all_folder_skills)
             menu.addAction(refresh_all_action)
         else:
-            # 新建子文件夹
+            new_note_action = QAction("新建笔记", self)
+            new_note_action.triggered.connect(lambda: self._create_note_in_folder(folder_name))
+            menu.addAction(new_note_action)
+
             new_sub_action = QAction("新建子文件夹", self)
             new_sub_action.triggered.connect(lambda: self._create_folder(folder_name))
             menu.addAction(new_sub_action)
-
-            menu.addSeparator()
 
             rename_action = QAction("重命名", self)
             rename_action.triggered.connect(lambda: self._rename_folder(folder_name))
@@ -656,14 +846,47 @@ class Sidebar(QWidget):
             delete_action.triggered.connect(lambda: self._delete_folder(folder_name))
             menu.addAction(delete_action)
 
-            menu.addSeparator()
-
-            # 刷新文件夹概要
             refresh_action = QAction("刷新文件夹概要", self)
             refresh_action.triggered.connect(lambda: self._refresh_folder_skill(folder_name))
             menu.addAction(refresh_action)
 
         menu.exec(self.folder_tree.mapToGlobal(pos))
+
+    def _apply_menu_style(self, menu: QMenu) -> None:
+        """应用紧凑菜单样式"""
+        menu.setStyleSheet("""
+            QMenu {
+                background-color: #FFFEF9;
+                border: 1px solid #E8DFD5;
+                border-radius: 6px;
+                padding: 4px 0px;
+            }
+            QMenu::item {
+                padding: 6px 24px 6px 12px;
+                color: #3D3428;
+                font-size: 13px;
+            }
+            QMenu::item:selected {
+                background-color: #FDF6ED;
+                color: #8B5A2B;
+            }
+            QMenu::separator {
+                height: 1px;
+                background-color: #E8DFD5;
+                margin: 4px 8px;
+            }
+        """)
+
+    def _create_note_in_folder(self, folder_name: str) -> None:
+        """在指定文件夹中创建新笔记"""
+        dialog = NewNoteDialog(self, folder_name)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            note_manager = get_note_manager()
+            note = note_manager.create_note(dialog.note_title, folder=folder_name)
+
+            self._current_folder = folder_name
+            self.refresh()
+            self.note_created.emit(note)
 
     def _rename_note(self, note_id: str) -> None:
         """重命名笔记"""

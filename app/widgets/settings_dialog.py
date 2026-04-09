@@ -28,6 +28,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QListView,
     QHBoxLayout,
+    QToolButton,
     QListWidget,
     QListWidgetItem,
     QMessageBox,
@@ -39,6 +40,7 @@ from PySide6.QtWidgets import (
 from ..core.config import get_config
 from ..core.system_config import get_system_config_instance
 from ..mcp.client import validate_mcp_server_config, test_mcp_server_connection, parse_mcp_config
+from ..ai.client import create_client
 
 
 class NoBorderComboBox(QComboBox):
@@ -798,14 +800,60 @@ class SettingsDialog(QDialog):
 
         self.base_url_input = QLineEdit()
         self.base_url_input.setPlaceholderText("API Base URL")
-        self.base_url_input.textChanged.connect(self._on_ai_config_changed)
+        self.base_url_input.textChanged.connect(self._on_base_url_changed)
         api_layout.addRow("Base URL:", self.base_url_input)
+
+        # API Key 输入框和显示/隐藏按钮
+        api_key_container = QWidget()
+        api_key_layout = QHBoxLayout(api_key_container)
+        api_key_layout.setContentsMargins(0, 0, 0, 0)
+        api_key_layout.setSpacing(4)
 
         self.api_key_input = QLineEdit()
         self.api_key_input.setEchoMode(QLineEdit.EchoMode.Password)
         self.api_key_input.setPlaceholderText("API Key")
         self.api_key_input.textChanged.connect(self._on_ai_config_changed)
-        api_layout.addRow("API Key:", self.api_key_input)
+        api_key_layout.addWidget(self.api_key_input, 1)
+
+        # 显示/隐藏按钮 - 小巧紧凑样式
+        self.api_key_toggle_btn = QToolButton()
+        self.api_key_toggle_btn.setFixedSize(24, 24)
+        self.api_key_toggle_btn.setToolTip("显示/隐藏 API Key")
+        self.api_key_toggle_btn.setCheckable(True)
+        self.api_key_toggle_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+
+        # 加载眼睛图标
+        eye_icon_path = Path(__file__).parent.parent.parent / "assets" / "eye.svg"
+        eye_off_icon_path = Path(__file__).parent.parent.parent / "assets" / "eye-off.svg"
+
+        if eye_icon_path.exists():
+            self._eye_icon = QIcon(str(eye_icon_path))
+            self._eye_off_icon = QIcon(str(eye_off_icon_path)) if eye_off_icon_path.exists() else self._eye_icon
+            self.api_key_toggle_btn.setIcon(self._eye_icon)
+        else:
+            # 降级方案：使用文字
+            self._eye_icon = None
+            self._eye_off_icon = None
+            self.api_key_toggle_btn.setText("👁")
+
+        self.api_key_toggle_btn.setStyleSheet("""
+            QToolButton {
+                background-color: transparent;
+                border: none;
+                border-radius: 4px;
+                padding: 4px;
+            }
+            QToolButton:hover {
+                background-color: #F5EDE4;
+            }
+            QToolButton:checked {
+                background-color: #FDF6ED;
+            }
+        """)
+        self.api_key_toggle_btn.toggled.connect(self._toggle_api_key_visibility)
+        api_key_layout.addWidget(self.api_key_toggle_btn)
+
+        api_layout.addRow("API Key:", api_key_container)
 
         self.model_combo = NoBorderComboBox()
         model_view = QListView()
@@ -836,10 +884,18 @@ class SettingsDialog(QDialog):
 
         layout.addWidget(api_group)
 
+        # 扩展模型预设，支持更多 API 提供商
         self._model_presets = {
             "openai": ["gpt-4", "gpt-4-turbo", "gpt-3.5-turbo"],
             "anthropic": ["claude-3-opus-20240229", "claude-3-sonnet-20240229", "claude-3-haiku-20240307"],
             "ollama": ["llama2", "llama3", "mistral", "codellama"],
+        }
+
+        # 根据 base_url 的模型映射
+        self._url_model_map = {
+            "dashscope": ["glm-5", "glm-4", "glm-4-plus", "qwen-max", "qwen-plus", "qwen-turbo"],
+            "siliconflow": ["deepseek-ai/DeepSeek-V3", "deepseek-ai/DeepSeek-R1", "Qwen/Qwen2.5-72B-Instruct"],
+            "openrouter": ["anthropic/claude-3.5-sonnet", "openai/gpt-4o", "google/gemini-pro"],
         }
 
         layout.addStretch()
@@ -1011,6 +1067,9 @@ class SettingsDialog(QDialog):
         ai_config = config.get_ai_config()
         self.base_url_input.setText(ai_config.get("base_url", ""))
         self.api_key_input.setText(ai_config.get("api_key", ""))
+
+        # 先更新模型列表，再设置当前模型
+        self._update_model_list()
         self.model_combo.setCurrentText(ai_config.get("model", ""))
 
         self.font_size_spin.setValue(config.editor_font_size)
@@ -1025,8 +1084,7 @@ class SettingsDialog(QDialog):
 
     def _on_provider_changed(self, provider: str) -> None:
         """提供商改变"""
-        self.model_combo.clear()
-        self.model_combo.addItems(self._model_presets.get(provider, []))
+        self._update_model_list(provider)
 
         default_urls = {
             "openai": "https://api.openai.com/v1",
@@ -1037,8 +1095,77 @@ class SettingsDialog(QDialog):
 
         self.api_key_input.setEnabled(provider != "ollama")
 
+    def _on_base_url_changed(self, text: str) -> None:
+        """Base URL 改变时更新模型列表"""
+        self._update_model_list()
+        self._on_ai_config_changed()
+
+    def _get_models_for_url(self, base_url: str) -> list[str]:
+        """根据 base_url 获取模型列表"""
+        base_url_lower = base_url.lower()
+
+        # 检查 URL 中包含的关键字
+        for key, models in self._url_model_map.items():
+            if key in base_url_lower:
+                return models
+
+        # 默认返回 openai 的模型
+        return self._model_presets.get("openai", [])
+
+    def _update_model_list(self, provider: str | None = None) -> None:
+        """更新模型列表"""
+        if provider is None:
+            provider = self.provider_combo.currentText()
+
+        base_url = self.base_url_input.text()
+        api_key = self.api_key_input.text()
+        current_text = self.model_combo.currentText()
+
+        models = []
+
+        if base_url and api_key:
+            try:
+                client = create_client(provider, {
+                    "api_key": api_key,
+                    "base_url": base_url,
+                    "model": current_text or "gpt-4"
+                })
+                api_models = client.list_models()
+                if api_models:
+                    models = api_models
+            except Exception:
+                pass
+
+        self.model_combo.blockSignals(True)
+        self.model_combo.clear()
+        if models:
+            self.model_combo.addItems(models)
+        if current_text:
+            if models and current_text not in models:
+                self.model_combo.setCurrentText(current_text)
+            elif not models:
+                self.model_combo.setCurrentText(current_text)
+        self.model_combo.blockSignals(False)
+
     def _on_ai_config_changed(self) -> None:
         pass
+
+    def _toggle_api_key_visibility(self, checked: bool) -> None:
+        """切换 API Key 显示/隐藏"""
+        if checked:
+            self.api_key_input.setEchoMode(QLineEdit.EchoMode.Normal)
+            if self._eye_off_icon:
+                self.api_key_toggle_btn.setIcon(self._eye_off_icon)
+            else:
+                self.api_key_toggle_btn.setText("🙈")
+            self.api_key_toggle_btn.setToolTip("隐藏 API Key")
+        else:
+            self.api_key_input.setEchoMode(QLineEdit.EchoMode.Password)
+            if self._eye_icon:
+                self.api_key_toggle_btn.setIcon(self._eye_icon)
+            else:
+                self.api_key_toggle_btn.setText("👁")
+            self.api_key_toggle_btn.setToolTip("显示 API Key")
 
     def _on_editor_config_changed(self) -> None:
         pass

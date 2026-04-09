@@ -3,10 +3,14 @@
 负责从笔记内容自动生成 SKILL.md 文件。
 """
 
+import re
+import sys
 from pathlib import Path
 from typing import Any
 
 import yaml
+
+from .note_naming import name_to_skill_name
 
 
 class SkillGenerator:
@@ -143,22 +147,23 @@ returns:
         """
         self.ai_client = client
 
-    def generate_skill_md(self, content: str, use_ai: bool = True) -> str:
+    def generate_skill_md(self, content: str, use_ai: bool = True, note_title: str = "") -> str:
         """生成 SKILL.md 内容
 
         Args:
             content: 笔记内容
             use_ai: 是否使用 AI 生成
+            note_title: 笔记标题（用于设置 name 字段）
 
         Returns:
             SKILL.md 内容
         """
         if use_ai and self.ai_client is not None:
-            return self._generate_with_ai(content)
+            return self._generate_with_ai(content, note_title)
         else:
-            return self._generate_simple(content)
+            return self._generate_simple(content, note_title)
 
-    def _generate_with_ai(self, content: str) -> str:
+    def _generate_with_ai(self, content: str, note_title: str = "") -> str:
         """使用 AI 生成 SKILL.md"""
         try:
             prompt = self.GENERATION_PROMPT.format(content=content)
@@ -182,25 +187,43 @@ returns:
             if not response.startswith("---"):
                 response = "---\n" + response
 
+            # 如果提供了笔记标题，替换 name 字段
+            if note_title:
+                skill_name = name_to_skill_name(note_title)
+                # 尝试替换 YAML 中的 name 字段
+                response = re.sub(
+                    r'^name:\s*\S+',
+                    f'name: {skill_name}',
+                    response,
+                    flags=re.MULTILINE
+                )
+
             return response
 
         except Exception as e:
-            print(f"AI generation failed: {e}")
-            return self._generate_simple(content)
+            try:
+                print(f"AI generation failed: {e}")
+            except UnicodeEncodeError:
+                # Windows 控制台编码问题，使用 stderr 输出
+                print(f"AI generation failed: {e}", file=sys.stderr)
+            return self._generate_simple(content, note_title)
 
-    def _generate_simple(self, content: str) -> str:
+    def _generate_simple(self, content: str, note_title: str = "") -> str:
         """简单规则生成 SKILL.md"""
-        import re
-
-        # 提取标题
-        title_match = re.search(r"^#\s+(.+)$", content, re.MULTILINE)
-        title = title_match.group(1) if title_match else "untitled"
-
-        # 生成 name（slug 化）
-        name = title.lower()
-        name = re.sub(r"[^\w\u4e00-\u9fff-]", "-", name)
-        name = re.sub(r"-+", "-", name)
-        name = name.strip("-") or "untitled"
+        # 使用笔记标题或从内容中提取标题
+        if note_title:
+            title = note_title
+            # 使用笔记标题生成 name
+            name = name_to_skill_name(note_title)
+        else:
+            # 提取标题
+            title_match = re.search(r"^#\s+(.+)$", content, re.MULTILINE)
+            title = title_match.group(1) if title_match else "untitled"
+            # 生成 name（slug 化）
+            name = title.lower()
+            name = re.sub(r"[^\w\u4e00-\u9fff-]", "-", name)
+            name = re.sub(r"-+", "-", name)
+            name = name.strip("-") or "untitled"
 
         # 提取描述（前 200 字）
         text = re.sub(r"#.*?\n", "", content)
@@ -232,7 +255,7 @@ allowed-tools: [Read, Write, Bash]
 """
         return skill_md
 
-    def generate_and_save(self, note_id: str, note_content: str, skill_path: Path, use_ai: bool = True) -> bool:
+    def generate_and_save(self, note_id: str, note_content: str, skill_path: Path, use_ai: bool = True, note_title: str = "") -> bool:
         """生成并保存 SKILL.md
 
         Args:
@@ -240,12 +263,13 @@ allowed-tools: [Read, Write, Bash]
             note_content: 笔记内容
             skill_path: SKILL.md 保存路径
             use_ai: 是否使用 AI 生成
+            note_title: 笔记标题（用于设置 SKILL.md 中的 name 字段）
 
         Returns:
             是否成功
         """
         try:
-            skill_content = self.generate_skill_md(note_content, use_ai=use_ai)
+            skill_content = self.generate_skill_md(note_content, use_ai=use_ai, note_title=note_title)
 
             skill_path.parent.mkdir(parents=True, exist_ok=True)
             with open(skill_path, "w", encoding="utf-8") as f:
@@ -254,7 +278,10 @@ allowed-tools: [Read, Write, Bash]
             return True
 
         except Exception as e:
-            print(f"Failed to generate SKILL.md: {e}")
+            try:
+                print(f"Failed to generate SKILL.md: {e}")
+            except UnicodeEncodeError:
+                print(f"Failed to generate SKILL.md: {e}", file=sys.stderr)
             return False
 
 
