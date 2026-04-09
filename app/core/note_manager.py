@@ -310,8 +310,8 @@ class NoteManager(metaclass=SingletonMeta):
             new_note_path = self._get_note_path(new_note_id)
 
             # 获取 skills 路径
-            old_skill_path = self._get_skill_path(note_id)
-            new_skill_path = self._get_skill_path(new_note_id)
+            old_skill_path = self._get_skill_file(note_id).parent
+            new_skill_path = self._get_skill_file(new_note_id).parent
 
             # 重命名笔记文件夹
             if old_note_path.exists():

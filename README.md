@@ -120,8 +120,27 @@ noteasskill/
 ### 运行测试
 
 ```bash
-python -m pytest tests/
+# 运行全部测试
+python -m pytest tests/ -v
+
+# 运行指定模块
+python -m pytest tests/test_core/ -v
+python -m pytest tests/test_ai/ -v
+
+# 运行单个测试
+python -m pytest tests/test_core/test_singleton.py::TestSingletonMeta::test_same_instance -v
+
+# 带覆盖率报告
+python -m pytest tests/ -v --cov=app --cov-report=html
 ```
+
+测试分层：
+- `tests/test_core/` — 核心业务逻辑单元测试
+- `tests/test_ai/` — AI 客户端单元测试
+- `tests/test_mcp/` — MCP 模块单元测试
+- `tests/test_widgets/` — GUI 组件测试（pytest-qt）
+- `tests/test_integration/` — 集成测试（端到端流程）
+- `tests/test_automation.py` — GUI 自动化测试（需要桌面环境）
 
 ## 许可证
 
