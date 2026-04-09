@@ -47,7 +47,6 @@ notebook/skills/
 notebook/.folder_skills/
 
 # Claude Code
-CLAUDE.md
 .claude/
 tests/screenshots/
 
